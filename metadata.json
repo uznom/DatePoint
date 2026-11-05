@@ -1,0 +1,6 @@
+{
+  "name": "DatePoint - Philippine Holiday & Lunar Calendar",
+  "description": "DatePoint: Professional calendar with astronomical moon phases, Philippine public holidays, customizable advert header, and print-ready PDF export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
