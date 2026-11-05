@@ -11,13 +11,4 @@ export const DEFAULT_ADVERT: AdvertConfig = {
   promoBadge: '',
 };
 
-export const DEFAULT_EVENTS: UserEvent[] = [
-  {
-    id: 'e1',
-    title: 'Memorial Cemetery Family Remembrance',
-    date: '2026-11-01',
-    time: '08:00',
-    category: 'family',
-    notes: 'Annual floral offering and family reunion at memorial park.',
-  },
-];
+export const DEFAULT_EVENTS: UserEvent[] = [];
