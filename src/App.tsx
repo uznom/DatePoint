@@ -4,6 +4,7 @@ import {
   CalendarStyleConfig, 
   UserEvent 
 } from './types';
+import { DEFAULT_ADVERT, DEFAULT_EVENTS } from './config/defaults';
 import { getHolidaysForMonth } from './utils/phHolidays';
 import { DEFAULT_STYLE_CONFIG } from './utils/stylePresets';
 import { CalendarCustomizer } from './components/CalendarCustomizer';
@@ -36,27 +37,6 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const DEFAULT_ADVERT: AdvertConfig = {
-  enabled: true,
-  theme: 'classic-ph',
-  businessName: 'MABUHAY TRADING & GENERAL MERCHANDISE',
-  tagline: 'Premium Goods & Quality Supplies • Trusted by Communities Nationwide Since 1988',
-  hotline: '+63 (2) 8876-5432 / +63 917 555 1234',
-  address: '143 Rizal Avenue, Sta. Cruz, Manila, Philippines',
-  website: 'www.mabuhaymerchandise.com.ph',
-  promoBadge: 'OFFICIAL SPONSOR 2026',
-};
-
-const DEFAULT_EVENTS: UserEvent[] = [
-  {
-    id: 'e1',
-    title: 'Memorial Cemetery Family Remembrance',
-    date: '2026-11-01',
-    time: '08:00',
-    category: 'family',
-    notes: 'Annual floral offering and family reunion at memorial park.',
-  },
-];
 
 type AppStage = 'landing' | 'wizard' | 'preview';
 
