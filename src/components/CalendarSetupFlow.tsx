@@ -9,6 +9,7 @@ import {
   TitleAlignment,
   UserEvent,
 } from '../types';
+import { EventForm } from './wizard/EventForm';
 import { PRESET_SPONSORS } from './AdvertHeader';
 import { EMBLEM_PRESETS } from '../utils/stylePresets';
 import {
@@ -1660,51 +1661,13 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                     </div>
 
                     {onAddEvent && (
-                      <Surface variant="secondary" className="rounded-2xl p-3 space-y-2.5">
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                          <div className="sm:col-span-5">
-                            <TextField
-                              fullWidth
-                              value={newEventDate}
-                              onChange={setNewEventDate}
-                              aria-label="Custom Event Date"
-                            >
-                              <Label className="text-xs">Date (YYYY-MM-DD)</Label>
-                              <Input type="date" />
-                            </TextField>
-                          </div>
-                          <div className="sm:col-span-7">
-                            <TextField
-                              fullWidth
-                              value={newEventTitle}
-                              onChange={setNewEventTitle}
-                              aria-label="Custom Event Title"
-                            >
-                              <Label className="text-xs">Event / Birthday Label</Label>
-                              <Input placeholder="e.g. Company Anniversary" />
-                            </TextField>
-                          </div>
-                        </div>
-
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          isDisabled={!newEventTitle.trim() || !newEventDate.trim()}
-                          onPress={() => {
-                            if (!newEventTitle.trim() || !newEventDate.trim()) return;
-                            onAddEvent({
-                              title: newEventTitle.trim(),
-                              date: newEventDate.trim(),
-                              category: 'family',
-                            });
-                            setNewEventTitle('');
-                          }}
-                          className="w-full"
-                        >
-                          <Plus className="size-4 shrink-0" />
-                          <span>Add Custom Date to Calendar</span>
-                        </Button>
-                      </Surface>
+                      <EventForm
+                        newEventDate={newEventDate}
+                        newEventTitle={newEventTitle}
+                        onDateChange={setNewEventDate}
+                        onTitleChange={setNewEventTitle}
+                        onAdd={onAddEvent}
+                      />
                     )}
 
                     {events.length > 0 && (

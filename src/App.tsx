@@ -6,6 +6,7 @@ import {
 } from './types';
 import { DEFAULT_ADVERT, DEFAULT_EVENTS } from './config/defaults';
 import { getHolidaysForMonth } from './utils/phHolidays';
+import { usePersistedState } from './hooks/usePersistedState';
 import { DEFAULT_STYLE_CONFIG } from './utils/stylePresets';
 import { CalendarCustomizer } from './components/CalendarCustomizer';
 import { PrintPreviewSheet } from './components/PrintPreviewSheet';
@@ -59,58 +60,25 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
   // Style Customizer Config State
-  const [styleConfig, setStyleConfig] = useState<CalendarStyleConfig>(() => {
-    try {
-      const saved = localStorage.getItem('datepoint_style_config');
-      return saved ? { ...DEFAULT_STYLE_CONFIG, ...JSON.parse(saved) } : DEFAULT_STYLE_CONFIG;
-    } catch {
-      return DEFAULT_STYLE_CONFIG;
-    }
-  });
+  const [styleConfig, setStyleConfig] = usePersistedState<CalendarStyleConfig>(
+    'datepoint_style_config',
+    DEFAULT_STYLE_CONFIG,
+    (saved) => ({ ...DEFAULT_STYLE_CONFIG, ...saved }),
+  );
 
   // Advert Header Config
-  const [advertConfig, setAdvertConfig] = useState<AdvertConfig>(() => {
-    try {
-      const saved = localStorage.getItem('kalendaryo_ph_advert');
-      return saved ? JSON.parse(saved) : DEFAULT_ADVERT;
-    } catch {
-      return DEFAULT_ADVERT;
-    }
-  });
+  const [advertConfig, setAdvertConfig] = usePersistedState<AdvertConfig>(
+    'kalendaryo_ph_advert',
+    DEFAULT_ADVERT,
+  );
 
   // User Events
-  const [events, setEvents] = useState<UserEvent[]>(() => {
-    try {
-      const saved = localStorage.getItem('kalendaryo_ph_events');
-      return saved ? JSON.parse(saved) : DEFAULT_EVENTS;
-    } catch {
-      return DEFAULT_EVENTS;
-    }
-  });
+  const [events, setEvents] = usePersistedState<UserEvent[]>(
+    'kalendaryo_ph_events',
+    DEFAULT_EVENTS,
+  );
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('datepoint_style_config', JSON.stringify(styleConfig));
-    } catch {
-      // ignore
-    }
-  }, [styleConfig]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('kalendaryo_ph_advert', JSON.stringify(advertConfig));
-    } catch {
-      // ignore
-    }
-  }, [advertConfig]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('kalendaryo_ph_events', JSON.stringify(events));
-    } catch {
-      // ignore
-    }
-  }, [events]);
+  // (persistence handled by usePersistedState)
 
   const handleAddEvent = (newEvent: Omit<UserEvent, 'id'>) => {
     const id = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
