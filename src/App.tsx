@@ -30,7 +30,8 @@ import {
   Palette,
   Printer,
   CalendarDays,
-  Check
+  Check,
+  Heart
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -408,6 +409,15 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* DEVELOPER CREDIT */}
+      <footer className="print:hidden border-t border-border py-4 px-3 text-center text-xs text-muted">
+        <span className="inline-flex items-center gap-1.5">
+          Created with
+          <Heart className="size-3.5 text-danger fill-current" aria-label="love" />
+          by <span className="font-semibold text-foreground">Mark Jefferson Monares</span>
+        </span>
+      </footer>
 
       {/* STYLE CUSTOMIZER DRAWER */}
       {isCustomizingStyle && (
