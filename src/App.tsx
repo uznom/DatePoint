@@ -4,7 +4,7 @@ import {
   CalendarStyleConfig, 
   UserEvent 
 } from './types';
-import { DEFAULT_ADVERT, DEFAULT_EVENTS } from './config/defaults';
+import { DEFAULT_ADVERT, DEFAULT_EVENTS, sanitizeAdvert, sanitizeEvents } from './config/defaults';
 import { getHolidaysForMonth } from './utils/phHolidays';
 import { usePersistedState } from './hooks/usePersistedState';
 import { DEFAULT_STYLE_CONFIG } from './utils/stylePresets';
@@ -70,12 +70,14 @@ export default function App() {
   const [advertConfig, setAdvertConfig] = usePersistedState<AdvertConfig>(
     'kalendaryo_ph_advert',
     DEFAULT_ADVERT,
+    sanitizeAdvert,
   );
 
   // User Events
   const [events, setEvents] = usePersistedState<UserEvent[]>(
     'kalendaryo_ph_events',
     DEFAULT_EVENTS,
+    sanitizeEvents,
   );
 
   // (persistence handled by usePersistedState)

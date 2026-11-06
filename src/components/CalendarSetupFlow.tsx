@@ -243,9 +243,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
   const [step, setStep] = useState<WizardStep>(initialStep);
   const [showMobilePreview, setShowMobilePreview] = useState<boolean>(false);
   const [newEventTitle, setNewEventTitle] = useState<string>('');
-  const [newEventDate, setNewEventDate] = useState<string>(
-    `${year}-${String(month).padStart(2, '0')}-15`
-  );
+  const [newEventDate, setNewEventDate] = useState<string>('');
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const mobilePreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -254,10 +252,6 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
   useEffect(() => {
     setStep(initialStep);
   }, [initialStep]);
-
-  useEffect(() => {
-    setNewEventDate(`${year}-${String(month).padStart(2, '0')}-15`);
-  }, [year, month]);
 
   const updateStyle = (patch: Partial<CalendarStyleConfig>) => {
     onStyleChange({ ...styleConfig, ...patch });
@@ -345,28 +339,17 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
 
   const handleSelectRecipient = (type: 'business' | 'personal' | 'civic' | 'maritime') => {
     updateStyle({ recipientType: type });
+    // Only toggle the banner / apply the visual theme. Never pre-fill the text
+    // inputs with sample data - users should only see placeholders.
+    const presetIndex = { business: 0, civic: 1, maritime: 2 } as const;
     if (type === 'personal') {
-      onAdvertChange({
-        ...advertConfig,
-        enabled: false,
-      });
-    } else if (type === 'business') {
-      onAdvertChange({
-        ...advertConfig,
-        enabled: true,
-        ...(PRESET_SPONSORS[0]?.config || {}),
-      });
-    } else if (type === 'civic') {
+      onAdvertChange({ ...advertConfig, enabled: false });
+    } else {
+      const presetTheme = PRESET_SPONSORS[presetIndex[type]]?.config.theme;
       onAdvertChange({
         ...advertConfig,
         enabled: true,
-        ...(PRESET_SPONSORS[1]?.config || {}),
-      });
-    } else if (type === 'maritime') {
-      onAdvertChange({
-        ...advertConfig,
-        enabled: true,
-        ...(PRESET_SPONSORS[2]?.config || {}),
+        ...(presetTheme ? { theme: presetTheme } : {}),
       });
     }
   };

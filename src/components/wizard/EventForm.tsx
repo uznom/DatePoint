@@ -24,7 +24,7 @@ export const EventForm: React.FC<EventFormProps> = ({
         <div className="sm:col-span-5">
           <TextField fullWidth value={newEventDate} onChange={onDateChange} aria-label="Custom Event Date">
             <Label className="text-xs">Date (YYYY-MM-DD)</Label>
-            <Input type="date" />
+            <Input type="date" placeholder="YYYY-MM-DD" />
           </TextField>
         </div>
         <div className="sm:col-span-7">
@@ -42,6 +42,7 @@ export const EventForm: React.FC<EventFormProps> = ({
           if (!newEventTitle.trim() || !newEventDate.trim()) return;
           onAdd({ title: newEventTitle.trim(), date: newEventDate.trim(), category: 'family' });
           onTitleChange('');
+          onDateChange('');
         }}
         className="w-full"
       >
