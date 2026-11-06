@@ -9,19 +9,6 @@
   }
 }
 
-/* MiSans & Mi Lanting local system font bindings */
-@font-face {
-  font-family: 'Mi Lanting';
-  src: local('Mi Lanting Pro'), local('MILANPro'), local('Mi Lanting'), local('MiLanting'), local('FZLanTingHei-R-GBK'), local('FZLanTingHei');
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Mi Sans';
-  src: local('MiSans'), local('Mi Sans'), local('MiSans VF');
-  font-display: swap;
-}
-
 /* Custom 1=1 print media styles for paper wall calendars - maximized edge to edge */
 @media print {
   @page {

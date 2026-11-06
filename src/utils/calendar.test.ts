@@ -119,9 +119,9 @@ test('buildCalendarMonthCells produces full 7-column rows with accurate overflow
   assert.equal(nov2026[34].isCurrentMonth, false);
 });
 
-test('Font family and weight helpers support Mi Sans and Mi Lanting for 1=1 canvas rendering', () => {
-  assert.ok(getFontFamilyCss('mi-sans').includes('Mi Sans'));
-  assert.ok(getFontFamilyCss('mi-lanting').includes('Mi Lanting'));
+test('Font family and weight helpers support the locally bundled fonts for 1=1 canvas rendering', () => {
+  assert.ok(getFontFamilyCss('mi-sans').includes('MiSansLatin VF'));
+  assert.ok(getFontFamilyCss('roboto-flex').includes('Roboto Flex Variable'));
   assert.equal(getFontWeightCss('black'), 900);
   assert.equal(formatMajorPhaseShort('First Quarter'), '1st');
   assert.equal(formatMajorPhaseShort('Full Moon'), 'Full');

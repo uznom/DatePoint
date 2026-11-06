@@ -110,7 +110,7 @@ export const AdvertHeader: React.FC<AdvertHeaderProps> = ({
   const borderColor = showHeaderAccent
     ? (styleConfig?.headerAccentColor || '#eab308')
     : 'transparent';
-  const fontFamily = styleConfig ? getFontFamilyCss(styleConfig.fontFamily) : "'Space Grotesk', sans-serif";
+  const fontFamily = styleConfig ? getFontFamilyCss(styleConfig.fontFamily) : getFontFamilyCss('space-grotesk');
   const fontWeight = styleConfig ? getFontWeightCss(styleConfig.fontWeight) : 800;
 
   const headerImage = styleConfig?.headerImage;

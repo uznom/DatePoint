@@ -1,4 +1,4 @@
-import { CalendarStyleConfig, FontFamilyOption } from '../types';
+import { CalendarStyleConfig, FontFamilyOption, FontStretchOption } from '../types';
 
 // Curated vector SVG data URLs for instant header emblems
 export const EMBLEM_PRESETS = [
@@ -34,6 +34,8 @@ export const DEFAULT_STYLE_CONFIG: CalendarStyleConfig = {
   fontWeight: 'bold',
   dateFontWeight: 'bold',
   dateNumberSize: 'md',
+  titleFontStretch: 'normal',
+  titleSlant: 0,
   borderRadius: 16,
   borderWidth: 1,
   borderColor: '#e2e8f0',
@@ -257,26 +259,85 @@ export const STYLE_PRESETS: Array<{
   },
 ];
 
+/** Every font family bundled locally (see src/fonts.ts). */
+export const FONT_FAMILY_IDS: FontFamilyOption[] = [
+  'roboto-flex',
+  'mi-sans',
+  'plus-jakarta',
+  'space-grotesk',
+  'cinzel',
+  'playfair',
+  'inter',
+  'roboto-mono',
+];
+
+/** Width steps offered in the UI, with their CSS font-stretch percentages. */
+export const FONT_STRETCH_STEPS: Array<{ id: FontStretchOption; label: string; percent: number }> = [
+  { id: 'ultra-condensed', label: 'Ultra Condensed', percent: 50 },
+  { id: 'extra-condensed', label: 'Extra Condensed', percent: 62.5 },
+  { id: 'condensed', label: 'Condensed', percent: 75 },
+  { id: 'semi-condensed', label: 'Semi Condensed', percent: 87.5 },
+  { id: 'normal', label: 'Normal', percent: 100 },
+  { id: 'semi-expanded', label: 'Semi Expanded', percent: 112.5 },
+  { id: 'expanded', label: 'Expanded', percent: 125 },
+  { id: 'extra-expanded', label: 'Extra Expanded', percent: 150 },
+];
+
+export const MAX_TITLE_SLANT = 10;
+
+/** Only Roboto Flex ships a width (wdth) axis among the bundled fonts. */
+export function fontSupportsWidth(family: FontFamilyOption): boolean {
+  return family === 'roboto-flex';
+}
+
+/** Width & slant for the month title and establishment name, clamped to what the font supports. */
+export function getTitleFontAxes(styleConfig: CalendarStyleConfig): {
+  stretch: FontStretchOption;
+  slant: number;
+} {
+  const stretch = fontSupportsWidth(styleConfig.fontFamily)
+    ? styleConfig.titleFontStretch || 'normal'
+    : 'normal';
+  const slant = Math.min(MAX_TITLE_SLANT, Math.max(0, styleConfig.titleSlant ?? 0));
+  return { stretch, slant };
+}
+
+/** Drops options that are no longer available (e.g. removed fonts) from a persisted style config. */
+export function sanitizeStyleConfig(saved: Partial<CalendarStyleConfig>): CalendarStyleConfig {
+  const merged: CalendarStyleConfig = { ...DEFAULT_STYLE_CONFIG, ...saved };
+  if (!FONT_FAMILY_IDS.includes(merged.fontFamily)) {
+    merged.fontFamily = DEFAULT_STYLE_CONFIG.fontFamily;
+  }
+  if (!FONT_STRETCH_STEPS.some((s) => s.id === merged.titleFontStretch)) {
+    merged.titleFontStretch = 'normal';
+  }
+  return merged;
+}
+
+/** Locally bundled monospace stack used for small labels on the canvas. */
+export const MONO_FONT_STACK = "'Roboto Mono Variable', monospace";
+
 export function getFontFamilyCss(family: FontFamilyOption): string {
   switch (family) {
+    // All families below are bundled locally via src/fonts.ts (no CDN requests).
+    case 'roboto-flex':
+      return "'Roboto Flex Variable', system-ui, sans-serif";
     case 'mi-sans':
-      return "'MiSans VF', 'MiSans', 'Mi Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
-    case 'mi-lanting':
-      return "'MI LANTING', 'Mi Lanting', 'MiLanting', 'MILANPro', 'FZLanTingHei-R-GBK', 'FZLanTingHei', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+      return "'MiSansLatin VF', system-ui, sans-serif";
     case 'plus-jakarta':
-      return "'Plus Jakarta Sans', system-ui, sans-serif";
+      return "'Plus Jakarta Sans Variable', system-ui, sans-serif";
     case 'space-grotesk':
-      return "'Space Grotesk', system-ui, sans-serif";
+      return "'Space Grotesk Variable', system-ui, sans-serif";
     case 'cinzel':
-      return "'Cinzel', Georgia, serif";
+      return "'Cinzel Variable', Georgia, serif";
     case 'playfair':
-      return "'Playfair Display', Georgia, serif";
+      return "'Playfair Display Variable', Georgia, serif";
     case 'inter':
-      return "'Inter', system-ui, sans-serif";
+      return "'Inter Variable', system-ui, sans-serif";
     case 'roboto-mono':
-      return "'Roboto Mono', monospace";
+      return `${MONO_FONT_STACK}`;
     default:
-      return "'Plus Jakarta Sans', sans-serif";
+      return "'Plus Jakarta Sans Variable', system-ui, sans-serif";
   }
 }
 

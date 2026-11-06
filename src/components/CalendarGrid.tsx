@@ -101,7 +101,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   }
 
   // Dynamic styling props
-  const fontFamily = styleConfig ? getFontFamilyCss(styleConfig.fontFamily) : "'Plus Jakarta Sans', sans-serif";
+  const fontFamily = styleConfig ? getFontFamilyCss(styleConfig.fontFamily) : getFontFamilyCss('plus-jakarta');
   const fontWeight = styleConfig ? getFontWeightCss(styleConfig.fontWeight) : 700;
   const borderRadius = styleConfig ? `${styleConfig.borderRadius}px` : '16px';
   const borderWidth = styleConfig ? `${styleConfig.borderWidth}px` : '1px';

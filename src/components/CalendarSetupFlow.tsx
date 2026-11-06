@@ -11,7 +11,12 @@ import {
 } from '../types';
 import { EventForm } from './wizard/EventForm';
 import { PRESET_SPONSORS } from './AdvertHeader';
-import { EMBLEM_PRESETS } from '../utils/stylePresets';
+import {
+  EMBLEM_PRESETS,
+  FONT_STRETCH_STEPS,
+  MAX_TITLE_SLANT,
+  fontSupportsWidth,
+} from '../utils/stylePresets';
 import {
   getPaperDimensions,
   loadHeaderImage,
@@ -70,9 +75,10 @@ import {
   Trash2,
   Hash,
   NotebookPen,
+  Type,
 } from 'lucide-react';
 
-export type WizardStep = 'recipient' | 'colors' | 'content' | 'paper';
+export type WizardStep = 'recipient' | 'typography' | 'colors' | 'content' | 'paper';
 
 interface CalendarSetupFlowProps {
   mode: 'landing' | 'wizard';
@@ -106,14 +112,15 @@ export const WIZARD_STEPS: Array<{
   shortLabel: string;
 }> = [
   { id: 'recipient', number: 1, label: '1. Who Is It For?', shortLabel: '1. Purpose' },
-  { id: 'colors', number: 2, label: '2. Colors & Style', shortLabel: '2. Style' },
-  { id: 'content', number: 3, label: '3. Moon & Holidays', shortLabel: '3. Content' },
-  { id: 'paper', number: 4, label: '4. Paper & Punch-Holes', shortLabel: '4. Paper' },
+  { id: 'typography', number: 2, label: '2. Fonts & Typography', shortLabel: '2. Fonts' },
+  { id: 'colors', number: 3, label: '3. Colors & Style', shortLabel: '3. Style' },
+  { id: 'content', number: 4, label: '4. Moon & Holidays', shortLabel: '4. Content' },
+  { id: 'paper', number: 5, label: '5. Paper & Punch-Holes', shortLabel: '5. Paper' },
 ];
 
 const FONT_OPTIONS: Array<{ id: FontFamilyOption; name: string }> = [
+  { id: 'roboto-flex', name: 'Roboto Flex' },
   { id: 'mi-sans', name: 'Mi Sans' },
-  { id: 'mi-lanting', name: 'Mi Lanting' },
   { id: 'plus-jakarta', name: 'Plus Jakarta Sans' },
   { id: 'space-grotesk', name: 'Space Grotesk' },
   { id: 'cinzel', name: 'Cinzel Serif' },
@@ -369,12 +376,12 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
               </Chip>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl xl:text-5xl font-black tracking-tight text-foreground leading-[1.1] font-['Space_Grotesk']">
-              Build & Print Your Custom 1=1 Calendar in 4 Simple Steps.
+            <h1 className="text-2xl sm:text-4xl xl:text-5xl font-black tracking-tight text-foreground leading-[1.1] font-['Space_Grotesk_Variable']">
+              Build & Print Your Custom 1=1 Calendar in 5 Simple Steps.
             </h1>
 
             <p className="text-sm sm:text-base text-muted leading-relaxed">
-              Start by choosing who your calendar is for, pick your custom colors and typography, decide whether to include moon phases, tides, and holidays, and select your paper size and wall punch-holes before exporting.
+              Start by choosing who your calendar is for, pick your fonts and typography, your custom colors, decide whether to include moon phases, tides, and holidays, and select your paper size and wall punch-holes before exporting.
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-1">
@@ -401,7 +408,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
             </div>
 
             {/* Interactive 4-Step Flow Overview Cards - Click any step to jump straight in */}
-            <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4 gap-2.5">
+            <div className="pt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3 gap-2.5">
               {WIZARD_STEPS.map((s) => (
                 <button
                   key={s.id}
@@ -464,7 +471,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
         <Separator />
 
         {/* Feature Cards using 1:1 HeroUI v3 Card */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <Card variant="default">
             <Card.Header>
               <Surface variant="secondary" className="size-9 rounded-2xl flex items-center justify-center text-accent mb-1">
@@ -480,9 +487,21 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
           <Card variant="default">
             <Card.Header>
               <Surface variant="secondary" className="size-9 rounded-2xl flex items-center justify-center text-accent mb-1">
+                <Type className="size-4" />
+              </Surface>
+              <Card.Title>2. Fonts &amp; Typography</Card.Title>
+              <Card.Description>
+                Choose a locally bundled font and tune the month title and establishment name's weight, width and slant.
+              </Card.Description>
+            </Card.Header>
+          </Card>
+
+          <Card variant="default">
+            <Card.Header>
+              <Surface variant="secondary" className="size-9 rounded-2xl flex items-center justify-center text-accent mb-1">
                 <Palette className="size-4" />
               </Surface>
-              <Card.Title>2. Select Colors</Card.Title>
+              <Card.Title>3. Select Colors</Card.Title>
               <Card.Description>
                 Customize every header, border, title, weekday, and cell color with full HSB & Hex ColorPickers.
               </Card.Description>
@@ -494,7 +513,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
               <Surface variant="secondary" className="size-9 rounded-2xl flex items-center justify-center text-accent mb-1">
                 <Moon className="size-4" />
               </Surface>
-              <Card.Title>3. Moon, Tides & Holidays</Card.Title>
+              <Card.Title>4. Moon, Tides & Holidays</Card.Title>
               <Card.Description>
                 Choose whether to include astronomical lunar phases, tidal guidance, and official holidays.
               </Card.Description>
@@ -506,7 +525,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
               <Surface variant="secondary" className="size-9 rounded-2xl flex items-center justify-center text-accent mb-1">
                 <FileText className="size-4" />
               </Surface>
-              <Card.Title>4. Paper & Punch-Holes</Card.Title>
+              <Card.Title>5. Paper & Punch-Holes</Card.Title>
               <Card.Description>
                 Select A4 or US Letter paper, Portrait or Landscape layout, and optional wall hanging punch-holes.
               </Card.Description>
@@ -518,6 +537,11 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
   }
 
   // WIZARD MODE
+  const widthSupported = fontSupportsWidth(styleConfig.fontFamily);
+  const stretchIndex = Math.max(
+    0,
+    FONT_STRETCH_STEPS.findIndex((st) => st.id === (styleConfig.titleFontStretch || 'normal')),
+  );
   const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === step);
   const goPrevStep = () => {
     if (currentStepIndex > 0) {
@@ -1045,12 +1069,13 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
             )}
 
             {/* STEP 2: SELECT COLORS, TYPOGRAPHY & BORDERS */}
-            {step === 'colors' && (
+            {/* STEP 2: FONTS & TYPOGRAPHY */}
+            {step === 'typography' && (
               <>
                 <Card.Header>
-                  <Card.Title>Step 2: Colors, Font Weight & Border Geometry</Card.Title>
+                  <Card.Title>Step 2: Fonts &amp; Typography</Card.Title>
                   <Card.Description>
-                    Customize your font family, date font weight, border weight, corner radius, and every calendar color.
+                    Pick a font (all bundled locally), then fine-tune the month title and establishment name.
                   </Card.Description>
                 </Card.Header>
 
@@ -1116,20 +1141,29 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                     </div>
                   </div>
 
-                  {/* Date Font Weight, Header Font Weight & Date Number Size */}
-                  <div className="space-y-3 pt-1">
+                  <Separator />
+
+                  {/* Month Title & Establishment Name */}
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Month Title &amp; Establishment Name</Label>
+                      <p className="text-xs text-muted mt-0.5">
+                        Weight, width and slant for the month/year heading and the business name in the banner.
+                      </p>
+                    </div>
+
                     <div className="space-y-1">
-                      <Label>Date Number Font Weight</Label>
+                      <Label>Font Weight</Label>
                       <ToggleButtonGroup
-                        aria-label="Date Number Font Weight"
+                        aria-label="Header and Month Title Font Weight"
                         selectionMode="single"
                         disallowEmptySelection
                         fullWidth
                         size="sm"
-                        selectedKeys={new Set([styleConfig.dateFontWeight || styleConfig.fontWeight])}
+                        selectedKeys={new Set([styleConfig.fontWeight])}
                         onSelectionChange={(keys) => {
                           const selected = Array.from(keys)[0] as FontWeightOption | undefined;
-                          if (selected) updateStyle({ dateFontWeight: selected });
+                          if (selected) updateStyle({ fontWeight: selected });
                         }}
                       >
                         {(['normal', 'medium', 'semibold', 'bold', 'black'] as FontWeightOption[]).map(
@@ -1143,18 +1177,81 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                       </ToggleButtonGroup>
                     </div>
 
+
+                    <div className="space-y-1.5">
+                      <Slider
+                        value={stretchIndex}
+                        onChange={(v) => {
+                          const idx = typeof v === 'number' ? v : v[0];
+                          updateStyle({ titleFontStretch: FONT_STRETCH_STEPS[idx]?.id ?? 'normal' });
+                        }}
+                        minValue={0}
+                        maxValue={FONT_STRETCH_STEPS.length - 1}
+                        step={1}
+                        isDisabled={!widthSupported}
+                      >
+                        <Label>Width</Label>
+                        <Slider.Output>
+                          {({ state }) => {
+                            const st = FONT_STRETCH_STEPS[state.values[0]];
+                            return st ? `${st.label} (${st.percent}%)` : '';
+                          }}
+                        </Slider.Output>
+                        <Slider.Track>
+                          <Slider.Fill />
+                          <Slider.Thumb />
+                        </Slider.Track>
+                      </Slider>
+                      {!widthSupported && (
+                        <p className="text-[11px] text-muted">
+                          Width needs Roboto Flex, the only bundled font with a width axis.
+                        </p>
+                      )}
+                    </div>
+
+                    <Slider
+                      value={styleConfig.titleSlant ?? 0}
+                      onChange={(v) => updateStyle({ titleSlant: typeof v === 'number' ? v : v[0] })}
+                      minValue={0}
+                      maxValue={MAX_TITLE_SLANT}
+                      step={0.5}
+                    >
+                      <Label>Slant</Label>
+                      <Slider.Output>{({ state }) => `${state.values[0]}°`}</Slider.Output>
+                      <Slider.Track>
+                        <Slider.Fill />
+                        <Slider.Thumb />
+                      </Slider.Track>
+                    </Slider>
+
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onPress={() =>
+                        updateStyle({ fontWeight: 'bold', titleFontStretch: 'normal', titleSlant: 0 })
+                      }
+                    >
+                      Reset Title Typography
+                    </Button>
+                  </div>
+
+                  <Separator />
+
+                  {/* Calendar Date Numbers */}
+                  <div className="space-y-3">
+                    <Label>Calendar Date Numbers</Label>
                     <div className="space-y-1">
-                      <Label>Header & Month Title Font Weight</Label>
+                      <Label>Date Number Font Weight</Label>
                       <ToggleButtonGroup
-                        aria-label="Header and Month Title Font Weight"
+                        aria-label="Date Number Font Weight"
                         selectionMode="single"
                         disallowEmptySelection
                         fullWidth
                         size="sm"
-                        selectedKeys={new Set([styleConfig.fontWeight])}
+                        selectedKeys={new Set([styleConfig.dateFontWeight || styleConfig.fontWeight])}
                         onSelectionChange={(keys) => {
                           const selected = Array.from(keys)[0] as FontWeightOption | undefined;
-                          if (selected) updateStyle({ fontWeight: selected });
+                          if (selected) updateStyle({ dateFontWeight: selected });
                         }}
                       >
                         {(['normal', 'medium', 'semibold', 'bold', 'black'] as FontWeightOption[]).map(
@@ -1196,9 +1293,22 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                       </ToggleButtonGroup>
                     </div>
                   </div>
+                </Card.Content>
+              </>
+            )}
 
-                  <Separator />
+            {step === 'colors' && (
+              <>
+                <Card.Header>
+                  <Card.Title>Step 3: Colors &amp; Border Geometry</Card.Title>
+                  <Card.Description>
+                    Customize border weight, corner radius, and every calendar color.
+                  </Card.Description>
+                </Card.Header>
 
+                <Separator />
+
+                <Card.Content className="space-y-4">
                   {/* Border Weight & Border Radius Controls */}
                   <div className="space-y-3.5">
                     <Label>Border Weight & Corner Radius</Label>
@@ -1448,7 +1558,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
             {step === 'content' && (
               <>
                 <Card.Header>
-                  <Card.Title>Step 3: Moon, Holidays, Week Numbers & Custom Dates</Card.Title>
+                  <Card.Title>Step 4: Moon, Holidays, Week Numbers &amp; Custom Dates</Card.Title>
                   <Card.Description>
                     Choose whether to include moon phases, official holidays, ISO week numbers, and personal/company events.
                   </Card.Description>
@@ -1691,7 +1801,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
             {step === 'paper' && (
               <>
                 <Card.Header>
-                  <Card.Title>Step 4: Paper Setup, Punch-Holes & Notes Box</Card.Title>
+                  <Card.Title>Step 5: Paper Setup, Punch-Holes &amp; Notes Box</Card.Title>
                   <Card.Description>
                     Select the physical paper sheet size, orientation, margins, punch-holes, and optional ruled memo lines.
                   </Card.Description>

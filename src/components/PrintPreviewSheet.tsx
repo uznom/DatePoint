@@ -209,9 +209,9 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => onEditWizardSteps?.('colors')}
+                  onClick={() => onEditWizardSteps?.('typography')}
                   className="cursor-pointer"
-                  title="Edit Step 2: Colors & Font"
+                  title="Edit Step 2: Fonts & Typography"
                 >
                   <Chip size="sm" variant="soft" color="default">
                     2. Font: {styleConfig.fontFamily}
@@ -220,16 +220,27 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => onEditWizardSteps?.('colors')}
+                  className="cursor-pointer"
+                  title="Edit Step 3: Colors & Style"
+                >
+                  <Chip size="sm" variant="soft" color="default">
+                    3. Colors &amp; Borders
+                  </Chip>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => onEditWizardSteps?.('content')}
                   className="cursor-pointer"
-                  title="Edit Step 3: Moon & Holidays"
+                  title="Edit Step 4: Moon & Holidays"
                 >
                   <Chip
                     size="sm"
                     variant="soft"
                     color={styleConfig.showMoonPhases !== false ? 'accent' : 'default'}
                   >
-                    3. Moon: {styleConfig.showMoonPhases !== false ? 'On' : 'Off'} • Holidays:{' '}
+                    4. Moon: {styleConfig.showMoonPhases !== false ? 'On' : 'Off'} • Holidays:{' '}
                     {styleConfig.showHolidays !== false ? 'On' : 'Off'}
                   </Chip>
                 </button>
@@ -238,10 +249,10 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
                   type="button"
                   onClick={() => onEditWizardSteps?.('paper')}
                   className="cursor-pointer"
-                  title="Edit Step 4: Paper & Punch-Holes"
+                  title="Edit Step 5: Paper & Punch-Holes"
                 >
                   <Chip size="sm" variant="soft" color="accent" className="uppercase font-mono">
-                    4. {styleConfig.paperSize} • {styleConfig.printOrientation} • Holes:{' '}
+                    5. {styleConfig.paperSize} • {styleConfig.printOrientation} • Holes:{' '}
                     {styleConfig.showHolePunchGuide ? 'Yes' : 'No'}
                   </Chip>
                 </button>

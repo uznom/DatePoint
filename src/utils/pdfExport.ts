@@ -2,7 +2,13 @@ import { jsPDF } from 'jspdf';
 import { AdvertConfig, CalendarStyleConfig, HolidayItem, MoonPhaseCategory, UserEvent } from '../types';
 import { getMoonPhaseForDate } from './moon';
 import { getHolidaysForMonth } from './phHolidays';
-import { DEFAULT_STYLE_CONFIG, getFontFamilyCss, getFontWeightCss } from './stylePresets';
+import {
+  DEFAULT_STYLE_CONFIG,
+  MONO_FONT_STACK,
+  getFontFamilyCss,
+  getFontWeightCss,
+  getTitleFontAxes,
+} from './stylePresets';
 
 export interface PdfExportOptions {
   year: number;
@@ -77,14 +83,16 @@ export async function ensureCalendarFontsLoaded(styleConfig: CalendarStyleConfig
   try {
     const fontFamily = getFontFamilyCss(styleConfig.fontFamily);
     const fontWeight = getFontWeightCss(styleConfig.fontWeight);
+    const { slant } = getTitleFontAxes(styleConfig);
     await Promise.allSettled([
       document.fonts.ready,
       document.fonts.load(`${fontWeight} 28px ${fontFamily}`),
+      ...(slant > 0 ? [document.fonts.load(`oblique ${slant}deg ${fontWeight} 28px ${fontFamily}`)] : []),
       document.fonts.load(`700 14px ${fontFamily}`),
       document.fonts.load(`600 12px ${fontFamily}`),
       document.fonts.load(`500 11px ${fontFamily}`),
       document.fonts.load(`400 10px ${fontFamily}`),
-      document.fonts.load(`500 9px "Roboto Mono"`),
+      document.fonts.load(`500 9px ${MONO_FONT_STACK}`),
     ]);
   } catch {
     // Ignore if font loading API fails in headless environments
@@ -189,6 +197,32 @@ function drawRoundedRectPath(
     ctx.quadraticCurveTo(x, y, x + radius, y);
     ctx.closePath();
   }
+}
+
+type TitleFontAxes = ReturnType<typeof getTitleFontAxes>;
+type CanvasWithStretch = CanvasRenderingContext2D & { fontStretch?: string };
+
+/**
+ * Applies a title font with the variable width (font-stretch) and slant (oblique angle)
+ * settings. If the browser rejects the oblique shorthand, the upright font stays applied.
+ */
+function setTitleFont(
+  ctx: CanvasRenderingContext2D,
+  weight: number,
+  sizePx: number,
+  family: string,
+  axes: TitleFontAxes,
+) {
+  const base = `${weight} ${sizePx}px ${family}`;
+  ctx.font = base;
+  if (axes.slant > 0) ctx.font = `oblique ${axes.slant}deg ${base}`;
+  const c = ctx as CanvasWithStretch;
+  if ('fontStretch' in c) c.fontStretch = axes.stretch;
+}
+
+function resetFontStretch(ctx: CanvasRenderingContext2D) {
+  const c = ctx as CanvasWithStretch;
+  if ('fontStretch' in c) c.fontStretch = 'normal';
 }
 
 function truncateTextToWidth(
@@ -473,6 +507,7 @@ export function renderCalendarSheetToCanvas(
 
   const fontFamily = getFontFamilyCss(styleConfig.fontFamily);
   const fontWeight = getFontWeightCss(styleConfig.fontWeight);
+  const titleAxes = getTitleFontAxes(styleConfig);
   const borderRadius = styleConfig.borderRadius ?? 12;
   const borderWidth = Math.max(0.5, styleConfig.borderWidth ?? 1);
   const borderColor = styleConfig.borderColor || '#cbd5e1';
@@ -510,7 +545,7 @@ export function renderCalendarSheetToCanvas(
       ctx.stroke();
 
       ctx.fillStyle = '#71717a';
-      ctx.font = `500 6.5px "Roboto Mono", monospace`;
+      ctx.font = `500 6.5px ${MONO_FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText('PUNCH', px, punchY + 6.5);
@@ -657,7 +692,7 @@ export function renderCalendarSheetToCanvas(
       contactEntries.push({
         kind: 'globe',
         text: advertConfig.website.trim(),
-        font: `500 9px "Roboto Mono", monospace`,
+        font: `500 9px ${MONO_FONT_STACK}`,
         alpha: 0.92,
       });
     }
@@ -707,7 +742,7 @@ export function renderCalendarSheetToCanvas(
     const hasTagline = Boolean(advertConfig.tagline && advertConfig.tagline.trim());
     const titleFontSize = isLandscape ? 18 : 16;
     ctx.fillStyle = styleConfig.headerTextColor || '#ffffff';
-    ctx.font = `${fontWeight} ${titleFontSize}px ${fontFamily}`;
+    setTitleFont(ctx, fontWeight, titleFontSize, fontFamily, titleAxes);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(
@@ -715,6 +750,7 @@ export function renderCalendarSheetToCanvas(
       leftCursorX,
       hasTagline ? bannerY + bannerH / 2 - 9.5 : bannerY + bannerH / 2
     );
+    resetFontStretch(ctx);
 
     if (hasTagline) {
       ctx.save();
@@ -754,7 +790,7 @@ export function renderCalendarSheetToCanvas(
   const mainTitleSize = isLandscape ? 27.5 : 25;
 
   ctx.fillStyle = titleTextColor;
-  ctx.font = `${fontWeight} ${mainTitleSize}px ${fontFamily}`;
+  setTitleFont(ctx, fontWeight, mainTitleSize, fontFamily, titleAxes);
   ctx.textBaseline = 'alphabetic';
 
   if (styleConfig.monthYearAlignment === 'center') {
@@ -774,6 +810,7 @@ export function renderCalendarSheetToCanvas(
     ctx.textAlign = 'right';
     ctx.fillText(String(year), contentX + contentW, titleBaselineY);
   }
+  resetFontStretch(ctx);
 
   curY += titleH + 8;
 
@@ -940,7 +977,7 @@ export function renderCalendarSheetToCanvas(
       const wkLabel = `W${wkNum}`;
       ctx.save();
       ctx.globalAlpha = 0.85;
-      ctx.font = `600 7px "Roboto Mono", monospace`;
+      ctx.font = `600 7px ${MONO_FONT_STACK}`;
       const wkW = ctx.measureText(wkLabel).width + 6;
       const wkH = 10.5;
       const wkX = cx + cellPad + dayWidth + 4.5;
@@ -973,7 +1010,7 @@ export function renderCalendarSheetToCanvas(
       );
 
       ctx.fillStyle = '#64748b';
-      ctx.font = `500 7.2px "Roboto Mono", monospace`;
+      ctx.font = `500 7.2px ${MONO_FONT_STACK}`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       const pctText = `${moon.illuminationPct}%`;

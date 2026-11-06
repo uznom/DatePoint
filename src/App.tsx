@@ -7,7 +7,7 @@ import {
 import { DEFAULT_ADVERT, DEFAULT_EVENTS, sanitizeAdvert, sanitizeEvents } from './config/defaults';
 import { getHolidaysForMonth } from './utils/phHolidays';
 import { usePersistedState } from './hooks/usePersistedState';
-import { DEFAULT_STYLE_CONFIG } from './utils/stylePresets';
+import { DEFAULT_STYLE_CONFIG, sanitizeStyleConfig } from './utils/stylePresets';
 import { CalendarCustomizer } from './components/CalendarCustomizer';
 import { PrintPreviewSheet } from './components/PrintPreviewSheet';
 import { ExportModal } from './components/ExportModal';
@@ -63,7 +63,7 @@ export default function App() {
   const [styleConfig, setStyleConfig] = usePersistedState<CalendarStyleConfig>(
     'datepoint_style_config',
     DEFAULT_STYLE_CONFIG,
-    (saved) => ({ ...DEFAULT_STYLE_CONFIG, ...saved }),
+    sanitizeStyleConfig,
   );
 
   // Advert Header Config
@@ -138,7 +138,7 @@ export default function App() {
             <Surface variant="secondary" className="size-8 sm:size-9 rounded-2xl flex items-center justify-center text-accent shrink-0">
               <CalendarDays className="size-4" />
             </Surface>
-            <span className="text-base sm:text-lg font-black tracking-tight text-foreground whitespace-nowrap shrink-0 font-['Space_Grotesk']">
+            <span className="text-base sm:text-lg font-black tracking-tight text-foreground whitespace-nowrap shrink-0 font-['Space_Grotesk_Variable']">
               DatePoint
             </span>
           </button>

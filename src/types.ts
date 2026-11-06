@@ -62,16 +62,27 @@ export interface AdvertConfig {
 }
 
 export type FontFamilyOption = 
+  | 'roboto-flex'
   | 'plus-jakarta' 
   | 'space-grotesk' 
   | 'cinzel' 
   | 'playfair' 
   | 'inter' 
   | 'roboto-mono'
-  | 'mi-sans'
-  | 'mi-lanting';
+  | 'mi-sans';
 
 export type FontWeightOption = 'normal' | 'medium' | 'semibold' | 'bold' | 'black';
+
+/** CSS font-stretch keywords (the only width values canvas text supports). */
+export type FontStretchOption =
+  | 'ultra-condensed'
+  | 'extra-condensed'
+  | 'condensed'
+  | 'semi-condensed'
+  | 'normal'
+  | 'semi-expanded'
+  | 'expanded'
+  | 'extra-expanded';
 
 export type TitleAlignment = 'left' | 'center' | 'right' | 'split';
 
@@ -93,6 +104,8 @@ export interface CalendarStyleConfig {
   fontWeight: FontWeightOption;
   dateFontWeight?: FontWeightOption; // Independent font weight for calendar date numbers
   dateNumberSize?: DateNumberSizeOption; // Size scale for day numbers
+  titleFontStretch?: FontStretchOption; // Width of month title & establishment name (variable wdth axis)
+  titleSlant?: number; // Oblique angle in degrees (0-10) for month title & establishment name
   borderRadius: number; // 0 to 24
   borderWidth: number; // 1 to 4
   borderColor: string; // hex color for grid & outer bounds

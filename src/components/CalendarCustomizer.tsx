@@ -8,7 +8,8 @@ import {
 } from '../types';
 import { 
   EMBLEM_PRESETS, 
-  DEFAULT_STYLE_CONFIG 
+  DEFAULT_STYLE_CONFIG,
+  getFontFamilyCss,
 } from '../utils/stylePresets';
 import { 
   Button, 
@@ -53,14 +54,14 @@ interface CalendarCustomizerProps {
 }
 
 const FONT_OPTIONS: Array<{ id: FontFamilyOption; name: string; preview: string }> = [
-  { id: 'mi-sans', name: 'Mi Sans', preview: "'MiSans VF', 'MiSans', sans-serif" },
-  { id: 'mi-lanting', name: 'Mi Lanting', preview: "'MI LANTING', 'Mi Lanting', sans-serif" },
-  { id: 'plus-jakarta', name: 'Plus Jakarta Sans', preview: "'Plus Jakarta Sans', sans-serif" },
-  { id: 'space-grotesk', name: 'Space Grotesk', preview: "'Space Grotesk', sans-serif" },
-  { id: 'cinzel', name: 'Cinzel Serif', preview: "'Cinzel', serif" },
-  { id: 'playfair', name: 'Playfair Display', preview: "'Playfair Display', serif" },
-  { id: 'inter', name: 'Inter Clean', preview: "'Inter', sans-serif" },
-  { id: 'roboto-mono', name: 'Roboto Mono', preview: "'Roboto Mono', monospace" },
+  { id: 'roboto-flex', name: 'Roboto Flex', preview: getFontFamilyCss('roboto-flex') },
+  { id: 'mi-sans', name: 'Mi Sans', preview: getFontFamilyCss('mi-sans') },
+  { id: 'plus-jakarta', name: 'Plus Jakarta Sans', preview: getFontFamilyCss('plus-jakarta') },
+  { id: 'space-grotesk', name: 'Space Grotesk', preview: getFontFamilyCss('space-grotesk') },
+  { id: 'cinzel', name: 'Cinzel Serif', preview: getFontFamilyCss('cinzel') },
+  { id: 'playfair', name: 'Playfair Display', preview: getFontFamilyCss('playfair') },
+  { id: 'inter', name: 'Inter Clean', preview: getFontFamilyCss('inter') },
+  { id: 'roboto-mono', name: 'Roboto Mono', preview: getFontFamilyCss('roboto-mono') },
 ];
 
 const DEFAULT_COLOR_SWATCHES = [
