@@ -315,7 +315,7 @@ export const PAGE_LAYOUTS: Array<{ id: PageLayoutOption; label: string; descript
   { id: 'classic', label: 'Classic', description: 'Banner, title and one month (compact header).' },
   { id: 'single', label: 'Single Month', description: 'Large header (35–40% of the page) and one month.' },
   { id: 'double', label: 'Double Month', description: 'Header (25–35% of the page) and two months per page.' },
-  { id: 'year', label: '12 Months', description: 'All twelve months on a single page.' },
+  { id: 'year', label: '12 Months', description: 'Header (15–35% of the page) and all twelve months on one page.' },
 ];
 
 /** Allowed header-zone share (percent of page height) per layout; null = layout has no header zone. */
@@ -324,6 +324,7 @@ export function getHeaderPctRange(
 ): { min: number; max: number; def: number } | null {
   if (layout === 'single') return { min: 35, max: 40, def: 38 };
   if (layout === 'double') return { min: 25, max: 35, def: 30 };
+  if (layout === 'year') return { min: 15, max: 35, def: 22 };
   return null;
 }
 

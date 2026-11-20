@@ -205,6 +205,11 @@ export function getRecommendedHeaderImageDimensions(
     bannerH = Math.max(naturalBannerH, zoneH - titleRowH - 8);
   } else if (layout === 'double') {
     bannerH = Math.round(((contentBottom - curY) * getHeaderPct(styleConfig)) / 100);
+  } else if (layout === 'year') {
+    const zoneH = Math.round(((contentBottom - curY) * getHeaderPct(styleConfig)) / 100);
+    const yearTitleSize = Math.min(34, Math.max(20, zoneH * 0.16));
+    const yearRowH = yearTitleSize * 1.2;
+    bannerH = Math.max(48, zoneH - yearRowH - 6);
   }
 
   const widthMm = Math.round((contentW / mmToPx) * 10) / 10;
@@ -991,6 +996,10 @@ export function renderCalendarSheetToCanvas(
     } else if (styleConfig.monthYearAlignment === 'left') {
       ctx.textAlign = 'left';
       ctx.fillText(joined, x, baselineY);
+    } else if (!leftText) {
+      // Single-part title (e.g. year-only on 12-month page): center instead of pushing to far right
+      ctx.textAlign = 'center';
+      ctx.fillText(rightText, x + w / 2, baselineY);
     } else {
       // 'split': first part on the left, second part on the right
       ctx.textAlign = 'left';
@@ -1507,7 +1516,7 @@ export function renderCalendarSheetToCanvas(
 
   const monthUpperOf = (m: number) => MONTH_NAMES[m - 1].toUpperCase();
 
-  if (layout === 'classic' || layout === 'year') {
+  if (layout === 'classic') {
     if (advertConfig.enabled) {
       drawBanner(contentX, curY, contentW, naturalBannerH, 1);
       curY += naturalBannerH + 11;
@@ -1518,33 +1527,14 @@ export function renderCalendarSheetToCanvas(
       contentW,
       curY + classicTitleH * 0.75,
       classicTitleSize,
-      layout === 'year' ? 'JANUARY – DECEMBER' : monthUpperOf(month),
+      monthUpperOf(month),
       String(year),
     );
     curY += classicTitleH + 8;
 
-    if (layout === 'classic') {
-      drawFullMonthGrid(contentX, curY, contentW, Math.max(180, bodyBottom - curY), year, month, holidays);
-    } else {
-      // 12 compact months on one page: 4x3 in landscape, 3x4 in portrait
-      const cols = isLandscape ? 4 : 3;
-      const rows = 12 / cols;
-      const gap = 10;
-      const cellW = (contentW - gap * (cols - 1)) / cols;
-      const cellH = (bodyBottom - curY - gap * (rows - 1)) / rows;
-      for (let i = 0; i < 12; i++) {
-        drawMiniMonth(
-          contentX + (i % cols) * (cellW + gap),
-          curY + Math.floor(i / cols) * (cellH + gap),
-          cellW,
-          cellH,
-          { year, month: i + 1 },
-          false,
-        );
-      }
-    }
+    drawFullMonthGrid(contentX, curY, contentW, Math.max(180, bodyBottom - curY), year, month, holidays);
   } else {
-    // 'single' (header 35-40%, one month) and 'double' (header 25-35%, two months)
+    // 'single' (35-40% header), 'double' (25-35% header), and 'year' (15-35% header)
     const zoneTop = curY;
     const zoneGap = 10;
     const zoneH = Math.round(((contentBottom - zoneTop) * getHeaderPct(styleConfig)) / 100);
@@ -1566,6 +1556,20 @@ export function renderCalendarSheetToCanvas(
           monthUpperOf(month),
           String(year),
         );
+      } else if (layout === 'year') {
+        // Banner on top, year-only heading underneath (no "JANUARY - DECEMBER" text)
+        const yearTitleSize = Math.min(34, Math.max(20, zoneH * 0.16));
+        const yearRowH = yearTitleSize * 1.2;
+        const bannerBoxH = Math.max(48, zoneH - yearRowH - 6);
+        drawBanner(contentX, zoneTop, panelW, bannerBoxH, bannerScaleFor(bannerBoxH, panelW));
+        drawTitleText(
+          contentX,
+          panelW,
+          zoneTop + bannerBoxH + 6 + yearRowH * 0.78,
+          yearTitleSize,
+          '',
+          String(year),
+        );
       } else {
         drawBanner(contentX, zoneTop, panelW, zoneH, bannerScaleFor(zoneH, panelW));
       }
@@ -1575,14 +1579,20 @@ export function renderCalendarSheetToCanvas(
       const last = pageMonths[pageMonths.length - 1];
       const sameYear = first.year === last.year;
       const headlineLeft =
-        pageMonths.length === 1
+        layout === 'year'
+          ? ''
+          : pageMonths.length === 1
           ? monthUpperOf(first.month)
           : sameYear
           ? `${monthUpperOf(first.month)} – ${monthUpperOf(last.month)}`
           : `${monthUpperOf(first.month)} ${first.year} –`;
       const headlineRight =
-        pageMonths.length === 1 || sameYear ? String(first.year) : `${monthUpperOf(last.month)} ${last.year}`;
-      const headlineSize = Math.min(78, Math.max(30, zoneH * 0.34));
+        layout === 'year'
+          ? String(year)
+          : pageMonths.length === 1 || sameYear
+          ? String(first.year)
+          : `${monthUpperOf(last.month)} ${last.year}`;
+      const headlineSize = Math.min(78, Math.max(28, zoneH * 0.34));
       const baseline = zoneTop + zoneH / 2 + headlineSize * 0.3;
       drawTitleText(contentX, panelW, baseline, headlineSize, headlineLeft, headlineRight);
 
@@ -1599,6 +1609,23 @@ export function renderCalendarSheetToCanvas(
     const calTop = zoneTop + zoneH + zoneGap;
     if (layout === 'single') {
       drawFullMonthGrid(contentX, calTop, contentW, Math.max(180, bodyBottom - calTop), year, month, holidays);
+    } else if (layout === 'year') {
+      // 12 compact months on one page: 4x3 in landscape, 3x4 in portrait
+      const cols = isLandscape ? 4 : 3;
+      const rows = 12 / cols;
+      const gap = 10;
+      const cellW = (contentW - gap * (cols - 1)) / cols;
+      const cellH = (bodyBottom - calTop - gap * (rows - 1)) / rows;
+      for (let i = 0; i < 12; i++) {
+        drawMiniMonth(
+          contentX + (i % cols) * (cellW + gap),
+          calTop + Math.floor(i / cols) * (cellH + gap),
+          cellW,
+          cellH,
+          { year, month: i + 1 },
+          false,
+        );
+      }
     } else {
       // Two months: side by side in landscape, stacked in portrait
       const gap = 14;

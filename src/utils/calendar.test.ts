@@ -191,15 +191,19 @@ test('PDF pages: one per month, one per month pair for double, one page for 12-m
   assert.deepEqual(getPdfPageAnchors(5, 'year', true), [5]);
 });
 
-test('header share stays inside 35-40% (single) and 25-35% (double)', () => {
+test('header share stays inside 35-40% (single), 25-35% (double), and 15-35% (year)', () => {
   assert.deepEqual(getHeaderPctRange('single'), { min: 35, max: 40, def: 38 });
   assert.deepEqual(getHeaderPctRange('double'), { min: 25, max: 35, def: 30 });
+  assert.deepEqual(getHeaderPctRange('year'), { min: 15, max: 35, def: 22 });
   assert.equal(getHeaderPctRange('classic'), null);
   assert.equal(getHeaderPct({ pageLayout: 'single', headerHeightPct: 90 }), 40);
   assert.equal(getHeaderPct({ pageLayout: 'single', headerHeightPct: 10 }), 35);
   assert.equal(getHeaderPct({ pageLayout: 'double', headerHeightPct: 38 }), 35);
   assert.equal(getHeaderPct({ pageLayout: 'double', headerHeightPct: 5 }), 25);
   assert.equal(getHeaderPct({ pageLayout: 'double' }), 30);
+  assert.equal(getHeaderPct({ pageLayout: 'year', headerHeightPct: 50 }), 35);
+  assert.equal(getHeaderPct({ pageLayout: 'year', headerHeightPct: 5 }), 15);
+  assert.equal(getHeaderPct({ pageLayout: 'year' }), 22);
   assert.equal(getHeaderPct({ pageLayout: 'classic', headerHeightPct: 38 }), 0);
 });
 
