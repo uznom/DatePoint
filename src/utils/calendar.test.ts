@@ -89,8 +89,16 @@ test('Astronomical lunar phases for November 2026 align with celestial almanac',
   assert.ok(nov24.illuminationPct >= 98, 'Full Moon should have maximum illumination');
 });
 
-import { getPaperDimensions, buildCalendarMonthCells, formatMajorPhaseShort } from './pdfExport';
-import { getFontFamilyCss, getFontWeightCss } from './stylePresets';
+import {
+  getPaperDimensions,
+  buildCalendarMonthCells,
+  formatMajorPhaseShort,
+  shiftMonth,
+  getMonthsOnPage,
+  getAdjacentMiniMonths,
+  getPdfPageAnchors,
+} from './pdfExport';
+import { getFontFamilyCss, getFontWeightCss, getHeaderPct, getHeaderPctRange, sanitizeStyleConfig } from './stylePresets';
 
 test('1=1 paper dimensions match physical A4 and US Letter aspect ratios in landscape and portrait', () => {
   const a4Land = getPaperDimensions('a4', 'landscape');
@@ -127,3 +135,66 @@ test('Font family and weight helpers support the locally bundled fonts for 1=1 c
   assert.equal(formatMajorPhaseShort('Full Moon'), 'Full');
 });
 
+
+test('A3 is ISO 297 x 420 mm with the same aspect ratio as A4', () => {
+  const a3 = getPaperDimensions('a3', 'landscape');
+  assert.equal(a3.widthMm, 420);
+  assert.equal(a3.heightMm, 297);
+  const a3p = getPaperDimensions('a3', 'portrait');
+  assert.equal(a3p.widthMm, 297);
+  assert.equal(a3p.heightMm, 420);
+  assert.ok(Math.abs(a3.aspectRatio - getPaperDimensions('a4', 'landscape').aspectRatio) < 1e-3);
+});
+
+test('shiftMonth rolls over year boundaries in both directions', () => {
+  assert.deepEqual(shiftMonth(2026, 1, -1), { year: 2025, month: 12 });
+  assert.deepEqual(shiftMonth(2026, 12, 1), { year: 2027, month: 1 });
+  assert.deepEqual(shiftMonth(2026, 11, 2), { year: 2027, month: 1 });
+  assert.deepEqual(shiftMonth(2026, 6, 0), { year: 2026, month: 6 });
+});
+
+test('months per page: single=1, double=2 (rolls into next year), year=12', () => {
+  assert.equal(getMonthsOnPage(2026, 5, 'classic').length, 1);
+  assert.equal(getMonthsOnPage(2026, 5, 'single').length, 1);
+  assert.deepEqual(getMonthsOnPage(2026, 12, 'double'), [{ year: 2026, month: 12 }, { year: 2027, month: 1 }]);
+  assert.equal(getMonthsOnPage(2026, 5, 'year').length, 12);
+});
+
+test('mini months: previous/next around the page months, none for classic and year', () => {
+  assert.deepEqual(getAdjacentMiniMonths(2026, 1, 'single', 'previous'), [{ year: 2025, month: 12 }]);
+  assert.deepEqual(getAdjacentMiniMonths(2026, 11, 'single', 'next'), [{ year: 2026, month: 12 }]);
+  assert.deepEqual(getAdjacentMiniMonths(2026, 5, 'single', 'both'), [{ year: 2026, month: 4 }, { year: 2026, month: 6 }]);
+  // double page shows May+June, so the neighbours are April and July
+  assert.deepEqual(getAdjacentMiniMonths(2026, 5, 'double', 'both'), [{ year: 2026, month: 4 }, { year: 2026, month: 7 }]);
+  assert.deepEqual(getAdjacentMiniMonths(2026, 5, 'single', 'none'), []);
+  assert.deepEqual(getAdjacentMiniMonths(2026, 5, 'classic', 'both'), []);
+  assert.deepEqual(getAdjacentMiniMonths(2026, 5, 'year', 'both'), []);
+});
+
+test('PDF pages: one per month, one per month pair for double, one page for 12-month layout', () => {
+  assert.deepEqual(getPdfPageAnchors(5, 'single', false), [5]);
+  assert.equal(getPdfPageAnchors(5, 'single', true).length, 12);
+  assert.deepEqual(getPdfPageAnchors(5, 'double', true), [1, 3, 5, 7, 9, 11]);
+  assert.deepEqual(getPdfPageAnchors(5, 'double', false), [5]);
+  assert.deepEqual(getPdfPageAnchors(5, 'year', true), [5]);
+});
+
+test('header share stays inside 35-40% (single) and 25-35% (double)', () => {
+  assert.deepEqual(getHeaderPctRange('single'), { min: 35, max: 40, def: 38 });
+  assert.deepEqual(getHeaderPctRange('double'), { min: 25, max: 35, def: 30 });
+  assert.equal(getHeaderPctRange('classic'), null);
+  assert.equal(getHeaderPct({ pageLayout: 'single', headerHeightPct: 90 }), 40);
+  assert.equal(getHeaderPct({ pageLayout: 'single', headerHeightPct: 10 }), 35);
+  assert.equal(getHeaderPct({ pageLayout: 'double', headerHeightPct: 38 }), 35);
+  assert.equal(getHeaderPct({ pageLayout: 'double', headerHeightPct: 5 }), 25);
+  assert.equal(getHeaderPct({ pageLayout: 'double' }), 30);
+  assert.equal(getHeaderPct({ pageLayout: 'classic', headerHeightPct: 38 }), 0);
+});
+
+test('persisted style config falls back safely for unknown paper, layout and mini options', () => {
+  const cfg = sanitizeStyleConfig({ paperSize: 'tabloid' as never, pageLayout: 'poster' as never, miniMonths: 'x' as never });
+  assert.equal(cfg.paperSize, 'a4');
+  assert.equal(cfg.pageLayout, 'classic');
+  assert.equal(cfg.miniMonths, 'none');
+  assert.equal(sanitizeStyleConfig({ paperSize: 'a3', pageLayout: 'double', headerHeightPct: 99 }).headerHeightPct, 35);
+});

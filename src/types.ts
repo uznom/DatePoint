@@ -99,6 +99,19 @@ export interface HeaderImageConfig {
 
 export type DateNumberSizeOption = 'sm' | 'md' | 'lg' | 'xl';
 
+export type PaperSizeOption = 'a4' | 'a3' | 'letter';
+
+/**
+ * classic: banner + title + one month (original layout)
+ * single:  large header zone (35-40% of the page) + one month
+ * double:  header zone (25-35% of the page) + two months per page
+ * year:    all 12 months as compact calendars on one page
+ */
+export type PageLayoutOption = 'classic' | 'single' | 'double' | 'year';
+
+/** Which neighbouring months to show as mini calendars (month grid only, no header). */
+export type MiniMonthsOption = 'none' | 'previous' | 'next' | 'both';
+
 export interface CalendarStyleConfig {
   fontFamily: FontFamilyOption;
   fontWeight: FontWeightOption;
@@ -141,7 +154,10 @@ export interface CalendarStyleConfig {
   showMemoLines?: boolean; // Display ruled Monthly Notes & Reminders section at bottom
 
   // Paper Print Settings
-  paperSize: 'a4' | 'letter';
+  paperSize: PaperSizeOption;
+  pageLayout?: PageLayoutOption;
+  headerHeightPct?: number; // header zone share of the page: 35-40 (single) or 25-35 (double)
+  miniMonths?: MiniMonthsOption;
   printOrientation: 'landscape' | 'portrait';
   printMargin: number; // mm: 2 to 20
 }

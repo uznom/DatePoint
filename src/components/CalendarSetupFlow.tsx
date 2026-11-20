@@ -6,6 +6,9 @@ import {
   FontWeightOption,
   HeaderImagePlacement,
   HolidayItem,
+  MiniMonthsOption,
+  PageLayoutOption,
+  PaperSizeOption,
   TitleAlignment,
   UserEvent,
 } from '../types';
@@ -15,7 +18,11 @@ import {
   EMBLEM_PRESETS,
   FONT_STRETCH_STEPS,
   MAX_TITLE_SLANT,
+  MINI_MONTH_OPTIONS,
+  PAGE_LAYOUTS,
   fontSupportsWidth,
+  getHeaderPct,
+  getHeaderPctRange,
 } from '../utils/stylePresets';
 import {
   getPaperDimensions,
@@ -538,6 +545,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
 
   // WIZARD MODE
   const widthSupported = fontSupportsWidth(styleConfig.fontFamily);
+  const headerRange = getHeaderPctRange(styleConfig.pageLayout);
   const stretchIndex = Math.max(
     0,
     FONT_STRETCH_STEPS.findIndex((st) => st.id === (styleConfig.titleFontStretch || 'normal')),
@@ -1821,22 +1829,124 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                       size="sm"
                       selectedKeys={new Set([styleConfig.paperSize])}
                       onSelectionChange={(keys) => {
-                        const selected = Array.from(keys)[0] as 'a4' | 'letter' | undefined;
+                        const selected = Array.from(keys)[0] as PaperSizeOption | undefined;
                         if (selected) updateStyle({ paperSize: selected });
                       }}
                     >
                       <ToggleButton id="a4" className="text-xs sm:text-sm">
                         <FileText className="size-4 shrink-0" />
-                        <span className="hidden sm:inline">A4 Sheet (210 × 297 mm)</span>
-                        <span className="sm:hidden">A4 (210×297mm)</span>
+                        <span className="hidden sm:inline">A4 (210 × 297 mm)</span>
+                        <span className="sm:hidden">A4</span>
+                      </ToggleButton>
+                      <ToggleButton id="a3" className="text-xs sm:text-sm">
+                        <ToggleButtonGroup.Separator />
+                        <FileText className="size-4 shrink-0" />
+                        <span className="hidden sm:inline">A3 (297 × 420 mm)</span>
+                        <span className="sm:hidden">A3</span>
                       </ToggleButton>
                       <ToggleButton id="letter" className="text-xs sm:text-sm">
                         <ToggleButtonGroup.Separator />
                         <FileText className="size-4 shrink-0" />
                         <span className="hidden sm:inline">US Letter (8.5 × 11 in)</span>
-                        <span className="sm:hidden">Letter (8.5×11&quot;)</span>
+                        <span className="sm:hidden">Letter</span>
                       </ToggleButton>
                     </ToggleButtonGroup>
+                  </div>
+
+                  {/* Page Layout */}
+                  <div className="space-y-2">
+                    <div>
+                      <Label>Page Layout</Label>
+                      <p className="text-xs text-muted mt-0.5">
+                        {PAGE_LAYOUTS.find((l) => l.id === (styleConfig.pageLayout || 'classic'))?.description}
+                      </p>
+                    </div>
+                    <ToggleButtonGroup
+                      aria-label="Page Layout"
+                      selectionMode="single"
+                      disallowEmptySelection
+                      fullWidth
+                      size="sm"
+                      selectedKeys={new Set([styleConfig.pageLayout || 'classic'])}
+                      onSelectionChange={(keys) => {
+                        const selected = Array.from(keys)[0] as PageLayoutOption | undefined;
+                        if (!selected) return;
+                        // Re-clamp the header share to the new layout's allowed range
+                        const next = getHeaderPct({ pageLayout: selected, headerHeightPct: styleConfig.headerHeightPct });
+                        updateStyle({
+                          pageLayout: selected,
+                          ...(next ? { headerHeightPct: next } : {}),
+                        });
+                      }}
+                    >
+                      {PAGE_LAYOUTS.map((l, idx) => (
+                        <ToggleButton key={l.id} id={l.id} className="text-xs px-1.5">
+                          {idx > 0 && <ToggleButtonGroup.Separator />}
+                          {l.label}
+                        </ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
+
+                    {headerRange && (
+                      <Slider
+                        value={getHeaderPct(styleConfig)}
+                        onChange={(v) =>
+                          updateStyle({ headerHeightPct: typeof v === 'number' ? v : v[0] })
+                        }
+                        minValue={headerRange.min}
+                        maxValue={headerRange.max}
+                        step={1}
+                      >
+                        <Label>Header Height (share of the page)</Label>
+                        <Slider.Output>
+                          {({ state }) =>
+                            `${state.values[0]}% header • ${100 - state.values[0]}% calendar`
+                          }
+                        </Slider.Output>
+                        <Slider.Track>
+                          <Slider.Fill />
+                          <Slider.Thumb />
+                        </Slider.Track>
+                      </Slider>
+                    )}
+
+                    {headerRange && (
+                      <div className="space-y-1">
+                        <Label>Mini Months (month only, no header)</Label>
+                        <ToggleButtonGroup
+                          aria-label="Mini previous or next month"
+                          selectionMode="single"
+                          disallowEmptySelection
+                          fullWidth
+                          size="sm"
+                          selectedKeys={new Set([styleConfig.miniMonths || 'none'])}
+                          onSelectionChange={(keys) => {
+                            const selected = Array.from(keys)[0] as MiniMonthsOption | undefined;
+                            if (selected) updateStyle({ miniMonths: selected });
+                          }}
+                        >
+                          {MINI_MONTH_OPTIONS.map((o, idx) => (
+                            <ToggleButton key={o.id} id={o.id} className="text-xs px-1.5">
+                              {idx > 0 && <ToggleButtonGroup.Separator />}
+                              {o.label}
+                            </ToggleButton>
+                          ))}
+                        </ToggleButtonGroup>
+                        <p className="text-[11px] text-muted">
+                          Adds a small calendar of the previous and/or next month beside the header.
+                        </p>
+                      </div>
+                    )}
+
+                    {(styleConfig.pageLayout === 'single' || styleConfig.pageLayout === 'double' || styleConfig.pageLayout === 'year') && (
+                      <p className="text-[11px] text-muted">
+                        {styleConfig.pageLayout === 'year'
+                          ? 'The 12-month page shows holidays as tinted days; moon phases are not shown.'
+                          : styleConfig.pageLayout === 'double'
+                          ? `Shows ${MONTH_NAMES[month - 1]} and ${MONTH_NAMES[month % 12]} together; notes box is off.`
+                          : 'Banner and a large month title fill the header zone.'}
+                      </p>
+                    )}
                   </div>
 
                   {/* Orientation */}

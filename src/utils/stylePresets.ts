@@ -1,4 +1,11 @@
-import { CalendarStyleConfig, FontFamilyOption, FontStretchOption } from '../types';
+import {
+  CalendarStyleConfig,
+  FontFamilyOption,
+  FontStretchOption,
+  MiniMonthsOption,
+  PageLayoutOption,
+  PaperSizeOption,
+} from '../types';
 
 // Curated vector SVG data URLs for instant header emblems
 export const EMBLEM_PRESETS = [
@@ -79,6 +86,9 @@ export const DEFAULT_STYLE_CONFIG: CalendarStyleConfig = {
 
   // Paper Print Settings
   paperSize: 'a4',
+  pageLayout: 'classic',
+  headerHeightPct: 38,
+  miniMonths: 'none',
   printOrientation: 'landscape',
   printMargin: 6,
 };
@@ -302,6 +312,40 @@ export function getTitleFontAxes(styleConfig: CalendarStyleConfig): {
   return { stretch, slant };
 }
 
+export const PAPER_SIZE_IDS: PaperSizeOption[] = ['a4', 'a3', 'letter'];
+
+export const PAGE_LAYOUTS: Array<{ id: PageLayoutOption; label: string; description: string }> = [
+  { id: 'classic', label: 'Classic', description: 'Banner, title and one month (compact header).' },
+  { id: 'single', label: 'Single Month', description: 'Large header (35–40% of the page) and one month.' },
+  { id: 'double', label: 'Double Month', description: 'Header (25–35% of the page) and two months per page.' },
+  { id: 'year', label: '12 Months', description: 'All twelve months on a single page.' },
+];
+
+export const MINI_MONTH_OPTIONS: Array<{ id: MiniMonthsOption; label: string }> = [
+  { id: 'none', label: 'None' },
+  { id: 'previous', label: 'Previous' },
+  { id: 'next', label: 'Next' },
+  { id: 'both', label: 'Both' },
+];
+
+/** Allowed header-zone share (percent of page height) per layout; null = layout has no header zone. */
+export function getHeaderPctRange(
+  layout: PageLayoutOption | undefined,
+): { min: number; max: number; def: number } | null {
+  if (layout === 'single') return { min: 35, max: 40, def: 38 };
+  if (layout === 'double') return { min: 25, max: 35, def: 30 };
+  return null;
+}
+
+/** Header zone share clamped to what the active layout allows (0 when the layout has no header zone). */
+export function getHeaderPct(styleConfig: Pick<CalendarStyleConfig, 'pageLayout' | 'headerHeightPct'>): number {
+  const range = getHeaderPctRange(styleConfig.pageLayout);
+  if (!range) return 0;
+  const raw = styleConfig.headerHeightPct;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return range.def;
+  return Math.min(range.max, Math.max(range.min, raw));
+}
+
 /** Drops options that are no longer available (e.g. removed fonts) from a persisted style config. */
 export function sanitizeStyleConfig(saved: Partial<CalendarStyleConfig>): CalendarStyleConfig {
   const merged: CalendarStyleConfig = { ...DEFAULT_STYLE_CONFIG, ...saved };
@@ -311,6 +355,10 @@ export function sanitizeStyleConfig(saved: Partial<CalendarStyleConfig>): Calend
   if (!FONT_STRETCH_STEPS.some((s) => s.id === merged.titleFontStretch)) {
     merged.titleFontStretch = 'normal';
   }
+  if (!PAPER_SIZE_IDS.includes(merged.paperSize)) merged.paperSize = DEFAULT_STYLE_CONFIG.paperSize;
+  if (!PAGE_LAYOUTS.some((l) => l.id === merged.pageLayout)) merged.pageLayout = 'classic';
+  if (!MINI_MONTH_OPTIONS.some((o) => o.id === merged.miniMonths)) merged.miniMonths = 'none';
+  merged.headerHeightPct = getHeaderPct(merged) || DEFAULT_STYLE_CONFIG.headerHeightPct;
   return merged;
 }
 

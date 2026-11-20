@@ -3,6 +3,7 @@ import {
   AdvertConfig, 
   CalendarStyleConfig, 
   HolidayItem, 
+  PaperSizeOption, 
   UserEvent 
 } from '../types';
 import { WizardStep } from './CalendarSetupFlow';
@@ -329,7 +330,7 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
                   aria-label="Paper Size"
                   selectedKey={styleConfig.paperSize}
                   onSelectionChange={(k) => {
-                    if (k) onStyleChange({ ...styleConfig, paperSize: k as 'a4' | 'letter' });
+                    if (k) onStyleChange({ ...styleConfig, paperSize: k as PaperSizeOption });
                   }}
                   className="w-48 sm:w-52"
                 >
@@ -341,6 +342,10 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
                     <ListBox>
                       <ListBox.Item id="a4" textValue="A4 (210 × 297mm)">
                         A4 (210 × 297mm)
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                      <ListBox.Item id="a3" textValue="A3 (297 × 420mm)">
+                        A3 (297 × 420mm)
                         <ListBox.ItemIndicator />
                       </ListBox.Item>
                       <ListBox.Item id="letter" textValue="US Letter (8.5 × 11 in)">

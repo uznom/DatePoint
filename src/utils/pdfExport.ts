@@ -1,5 +1,14 @@
 import { jsPDF } from 'jspdf';
-import { AdvertConfig, CalendarStyleConfig, HolidayItem, MoonPhaseCategory, UserEvent } from '../types';
+import {
+  AdvertConfig,
+  CalendarStyleConfig,
+  HolidayItem,
+  MiniMonthsOption,
+  MoonPhaseCategory,
+  PageLayoutOption,
+  PaperSizeOption,
+  UserEvent,
+} from '../types';
 import { getMoonPhaseForDate } from './moon';
 import { getHolidaysForMonth } from './phHolidays';
 import {
@@ -7,6 +16,7 @@ import {
   MONO_FONT_STACK,
   getFontFamilyCss,
   getFontWeightCss,
+  getHeaderPct,
   getTitleFontAxes,
 } from './stylePresets';
 
@@ -100,15 +110,16 @@ export async function ensureCalendarFontsLoaded(styleConfig: CalendarStyleConfig
 }
 
 /**
- * Computes exact physical millimeter and 1=1 logical pixel dimensions for A4 and US Letter sheets.
+ * Computes exact physical millimeter and 1=1 logical pixel dimensions for A4, A3 and US Letter sheets.
+ * A3 shares A4's aspect ratio, so it renders the same layout at 1.41x physical size.
  */
 export function getPaperDimensions(
-  paperSize: 'a4' | 'letter' = 'a4',
+  paperSize: PaperSizeOption = 'a4',
   orientation: 'landscape' | 'portrait' = 'landscape'
 ): SheetDimensions {
   const isLandscape = orientation === 'landscape';
-  const baseShortMm = paperSize === 'letter' ? 215.9 : 210;
-  const baseLongMm = paperSize === 'letter' ? 279.4 : 297;
+  const baseShortMm = paperSize === 'letter' ? 215.9 : paperSize === 'a3' ? 297 : 210;
+  const baseLongMm = paperSize === 'letter' ? 279.4 : paperSize === 'a3' ? 420 : 297;
 
   const widthMm = isLandscape ? baseLongMm : baseShortMm;
   const heightMm = isLandscape ? baseShortMm : baseLongMm;
@@ -124,6 +135,50 @@ export function getPaperDimensions(
     logicalHeightPx,
     aspectRatio,
   };
+}
+
+export interface MonthRef {
+  year: number;
+  month: number; // 1-12
+}
+
+/** Moves a (year, month) by a number of months, rolling over year boundaries. */
+export function shiftMonth(year: number, month: number, delta: number): MonthRef {
+  const idx = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(idx / 12), month: (((idx % 12) + 12) % 12) + 1 };
+}
+
+/** The months drawn as full calendars on one page for a layout (anchored at `month`). */
+export function getMonthsOnPage(year: number, month: number, layout: PageLayoutOption = 'classic'): MonthRef[] {
+  if (layout === 'double') return [{ year, month }, shiftMonth(year, month, 1)];
+  if (layout === 'year') return Array.from({ length: 12 }, (_, i) => ({ year, month: i + 1 }));
+  return [{ year, month }];
+}
+
+/** Mini calendars (month grid only, no header) for the months before and/or after the page's months. */
+export function getAdjacentMiniMonths(
+  year: number,
+  month: number,
+  layout: PageLayoutOption = 'classic',
+  mode: MiniMonthsOption = 'none',
+): MonthRef[] {
+  if (layout !== 'single' && layout !== 'double') return [];
+  const span = layout === 'double' ? 2 : 1;
+  const result: MonthRef[] = [];
+  if (mode === 'previous' || mode === 'both') result.push(shiftMonth(year, month, -1));
+  if (mode === 'next' || mode === 'both') result.push(shiftMonth(year, month, span));
+  return result;
+}
+
+/** First month of every PDF page: one page per month, per month pair (double) or one page (year). */
+export function getPdfPageAnchors(
+  month: number,
+  layout: PageLayoutOption = 'classic',
+  fullYear: boolean,
+): number[] {
+  if (layout === 'year') return [month];
+  if (!fullYear) return [month];
+  return layout === 'double' ? [1, 3, 5, 7, 9, 11] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 }
 
 /**
@@ -557,14 +612,32 @@ export function renderCalendarSheetToCanvas(
     }
   }
 
+  // Content toggles shared by the layouts below
+  const showMoonPhases = styleConfig.showMoonPhases !== false;
+  const showHolidays = styleConfig.showHolidays !== false;
+  const showCultural = styleConfig.showCultural !== false;
+  const showWeekNumbers = Boolean(styleConfig.showWeekNumbers);
+  const dateFontWeight = getFontWeightCss(styleConfig.dateFontWeight || styleConfig.fontWeight);
+
   // 1. ADVERT SPONSOR BANNER
-  if (advertConfig.enabled) {
-    const logoPx =
-      headerImage?.size === 'small' ? 38 : headerImage?.size === 'large' ? 58 : 48;
-    const bannerH = Math.max(isLandscape ? 74 : 78, hasImage ? logoPx + 24 : 74);
-    const bannerX = contentX;
-    const bannerY = curY;
-    const bannerW = contentW;
+  // Drawn at natural size (k = 1) or uniformly scaled up (k > 1) to fill a taller header zone.
+  const bannerLogoPx =
+    headerImage?.size === 'small' ? 38 : headerImage?.size === 'large' ? 58 : 48;
+  const naturalBannerH = Math.max(isLandscape ? 74 : 78, hasImage ? bannerLogoPx + 24 : 74);
+  const bannerScaleFor = (boxH: number, boxW: number) =>
+    Math.min(2.4, Math.max(1, Math.min(boxH / naturalBannerH, boxW / 520)));
+
+  const drawBanner = (outerX: number, outerY: number, outerW: number, outerH: number, k: number) => {
+    const logoPx = bannerLogoPx;
+    const bannerRadius = borderRadius / k;
+    const bannerX = 0;
+    const bannerY = 0;
+    const bannerW = outerW / k;
+    const bannerH = outerH / k;
+    ctx.save();
+    ctx.translate(outerX, outerY);
+    ctx.scale(k, k);
+
 
     // Optional subtle shadow
     if (styleConfig.showGridShadow) {
@@ -572,7 +645,7 @@ export function renderCalendarSheetToCanvas(
       ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
       ctx.shadowBlur = 10;
       ctx.shadowOffsetY = 3;
-      drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, borderRadius);
+      drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, bannerRadius);
       ctx.fillStyle = styleConfig.headerBgColor || '#1e3a8a';
       ctx.fill();
       ctx.restore();
@@ -580,7 +653,7 @@ export function renderCalendarSheetToCanvas(
 
     // Clip to banner rounded rect
     ctx.save();
-    drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, borderRadius);
+    drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, bannerRadius);
     ctx.clip();
 
     // 135deg Linear Gradient Background
@@ -772,446 +845,716 @@ export function renderCalendarSheetToCanvas(
     // Banner border
     if (showHeaderAccent && (styleConfig.headerBorderWidth ?? 0) > 0) {
       ctx.save();
-      drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, borderRadius);
+      drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, bannerRadius);
       ctx.strokeStyle = styleConfig.headerAccentColor || '#eab308';
       ctx.lineWidth = styleConfig.headerBorderWidth;
       ctx.stroke();
       ctx.restore();
     }
 
-    curY += bannerH + 11;
-  }
 
-  // 2. CALENDAR TITLE HEADER WITH CONFIGURABLE ALIGNMENT
-  const titleH = isLandscape ? 32 : 30;
-  const titleBaselineY = curY + titleH * 0.75;
-  const monthUpper = MONTH_NAMES[month - 1].toUpperCase();
-  const monthTitle = `${monthUpper} ${year}`;
-  const mainTitleSize = isLandscape ? 27.5 : 25;
-
-  ctx.fillStyle = titleTextColor;
-  setTitleFont(ctx, fontWeight, mainTitleSize, fontFamily, titleAxes);
-  ctx.textBaseline = 'alphabetic';
-
-  if (styleConfig.monthYearAlignment === 'center') {
-    ctx.textAlign = 'center';
-    ctx.fillText(monthTitle, contentX + contentW / 2, titleBaselineY);
-  } else if (styleConfig.monthYearAlignment === 'right') {
-    ctx.textAlign = 'right';
-    ctx.fillText(monthTitle, contentX + contentW, titleBaselineY);
-  } else if (styleConfig.monthYearAlignment === 'left') {
-    ctx.textAlign = 'left';
-    ctx.fillText(monthTitle, contentX, titleBaselineY);
-  } else {
-    // 'split': Month on left, Year on right
-    ctx.textAlign = 'left';
-    ctx.fillText(monthUpper, contentX, titleBaselineY);
-
-    ctx.textAlign = 'right';
-    ctx.fillText(String(year), contentX + contentW, titleBaselineY);
-  }
-  resetFontStretch(ctx);
-
-  curY += titleH + 8;
-
-  // 3. DYNAMIC EDGE-TO-EDGE CALENDAR GRID
-  const showMoonPhases = styleConfig.showMoonPhases !== false;
-  const showHolidays = styleConfig.showHolidays !== false;
-  const showCultural = styleConfig.showCultural !== false;
-  const showWeekNumbers = Boolean(styleConfig.showWeekNumbers);
-  const showMemoLines = Boolean(styleConfig.showMemoLines);
-  const dateFontWeight = getFontWeightCss(styleConfig.dateFontWeight || styleConfig.fontWeight);
-
-  const hasFooterBar = showMoonPhases || showHolidays;
-  const footerH = hasFooterBar ? 23 : 0;
-  const footerY = contentBottom - footerH;
-
-  const memoBoxH = showMemoLines ? (isLandscape ? 54 : 68) : 0;
-  const memoBoxY = (hasFooterBar ? footerY - 7 : contentBottom) - memoBoxH;
-
-  const gridX = contentX;
-  const gridY = curY;
-  const gridW = contentW;
-  const gridBottom = showMemoLines
-    ? memoBoxY - 8
-    : hasFooterBar
-    ? footerY - 7
-    : contentBottom;
-  const gridH = Math.max(180, gridBottom - gridY);
-
-  if (styleConfig.showGridShadow) {
-    ctx.save();
-    ctx.shadowColor = 'rgba(15, 23, 42, 0.05)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 2;
-    drawRoundedRectPath(ctx, gridX, gridY, gridW, gridH, borderRadius);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
     ctx.restore();
-  }
-
-  const cells = buildCalendarMonthCells(year, month);
-  const numRows = Math.ceil(cells.length / 7);
-  const weekdayHeaderH =
-    styleConfig.gridDensity === 'compact'
-      ? 24
-      : styleConfig.gridDensity === 'spacious'
-      ? 30
-      : 27;
-  const colW = gridW / 7;
-  const rowH = (gridH - weekdayHeaderH) / numRows;
-  const cellPad =
-    styleConfig.gridDensity === 'compact'
-      ? 5
-      : styleConfig.gridDensity === 'spacious'
-      ? 8
-      : 6.5;
-
-  // Proportional day number size with configurable dateNumberSize ('sm' | 'md' | 'lg' | 'xl')
-  const baseDayNumSize = Math.min(18.5, Math.max(13.5, Math.min(colW, rowH) * 0.21));
-  const sizeScale =
-    styleConfig.dateNumberSize === 'sm'
-      ? 0.85
-      : styleConfig.dateNumberSize === 'lg'
-      ? 1.22
-      : styleConfig.dateNumberSize === 'xl'
-      ? 1.45
-      : 1.0;
-  const dayNumSize = Math.round(
-    (styleConfig.gridDensity === 'compact'
-      ? baseDayNumSize - 1
-      : styleConfig.gridDensity === 'spacious'
-      ? baseDayNumSize + 1
-      : baseDayNumSize) * sizeScale * 10
-  ) / 10;
-
-  // Clip inside rounded grid container
-  ctx.save();
-  drawRoundedRectPath(ctx, gridX, gridY, gridW, gridH, borderRadius);
-  ctx.clip();
-
-  // Base cell fill
-  ctx.fillStyle = cellBgColor;
-  ctx.fillRect(gridX, gridY, gridW, gridH);
-
-  // Weekday Header Bar
-  ctx.fillStyle = weekdayBgColor;
-  ctx.fillRect(gridX, gridY, gridW, weekdayHeaderH);
-
-  // Subtle Sunday column header tint
-  ctx.save();
-  ctx.fillStyle = 'rgba(254, 226, 226, 0.22)';
-  ctx.fillRect(gridX, gridY, colW, weekdayHeaderH);
-  ctx.restore();
-
-  for (let col = 0; col < 7; col++) {
-    const isSunday = col === 0;
-    ctx.fillStyle = isSunday ? sundayColor : weekdayTextColor;
-    ctx.font = `${fontWeight} 11.5px ${fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(
-      WEEKDAYS_SHORT[col],
-      gridX + col * colW + colW / 2,
-      gridY + weekdayHeaderH / 2 + 0.5
-    );
-  }
-
-  // Helper to compute calendar week number (1-53)
-  const getWeekNumber = (dateStr: string): number => {
-    const d = new Date(dateStr + 'T00:00:00');
-    const startOfYear = new Date(d.getFullYear(), 0, 1);
-    const diffDays = Math.floor((d.getTime() - startOfYear.getTime()) / 86400000);
-    return Math.max(1, Math.ceil((diffDays + startOfYear.getDay() + 1) / 7));
   };
 
-  // Day Cells Content
-  for (let idx = 0; idx < cells.length; idx++) {
-    const cell = cells[idx];
-    const col = idx % 7;
-    const row = Math.floor(idx / 7);
-    const cx = gridX + col * colW;
-    const cy = gridY + weekdayHeaderH + row * rowH;
-    const isSunday = col === 0;
+  // 2. CALENDAR TITLE (month + year) WITH CONFIGURABLE ALIGNMENT
+  const classicTitleH = isLandscape ? 32 : 30;
+  const classicTitleSize = isLandscape ? 27.5 : 25;
 
-    const moon = getMoonPhaseForDate(cell.dateStr);
-    const dayHolidays = holidays.filter((h) => {
-      if (h.date !== cell.dateStr) return false;
-      if (h.type === 'cultural' && !showCultural) return false;
-      if ((h.type === 'regular' || h.type === 'special-non-working') && !showHolidays) return false;
-      return true;
-    });
-    const dayEvents = events.filter((e) => e.date === cell.dateStr);
-    const hasRegular = dayHolidays.some((h) => h.type === 'regular');
+  const drawTitleText = (
+    x: number,
+    w: number,
+    baselineY: number,
+    size: number,
+    leftText: string,
+    rightText: string,
+  ) => {
+    const joined = `${leftText} ${rightText}`.trim();
+    ctx.fillStyle = titleTextColor;
+    setTitleFont(ctx, fontWeight, size, fontFamily, titleAxes);
+    ctx.textBaseline = 'alphabetic';
 
-    // Cell background
-    if (!cell.isCurrentMonth) {
-      ctx.fillStyle = '#f8fafc';
-      ctx.fillRect(cx, cy, colW, rowH);
-    } else if (hasRegular || isSunday) {
-      ctx.fillStyle = 'rgba(254, 242, 242, 0.35)';
-      ctx.fillRect(cx, cy, colW, rowH);
+    // Shrink to fit narrow areas (e.g. half-width months on a double-month page)
+    const needed = ctx.measureText(
+      styleConfig.monthYearAlignment === 'split' ? `${leftText}   ${rightText}` : joined,
+    ).width;
+    if (needed > w) {
+      setTitleFont(ctx, fontWeight, Math.max(8, size * (w / needed) * 0.97), fontFamily, titleAxes);
     }
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(cx + 1, cy + 1, colW - 2, rowH - 2);
-    ctx.clip();
-
-    if (!cell.isCurrentMonth) {
-      ctx.globalAlpha = 0.38;
-    }
-
-    // Top Left: Day Number (using independent dateFontWeight & dateNumberSize)
-    const dayStr = String(cell.dayNumber);
-    ctx.fillStyle = hasRegular || isSunday ? sundayColor : dayNumberColor;
-    ctx.font = `${dateFontWeight} ${dayNumSize}px ${fontFamily}`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(dayStr, cx + cellPad, cy + cellPad);
-
-    // Optional Week Number pill on the first column (Sunday) of each row
-    if (showWeekNumbers && col === 0) {
-      const dayWidth = ctx.measureText(dayStr).width;
-      const wkNum = getWeekNumber(cell.dateStr);
-      const wkLabel = `W${wkNum}`;
-      ctx.save();
-      ctx.globalAlpha = 0.85;
-      ctx.font = `600 7px ${MONO_FONT_STACK}`;
-      const wkW = ctx.measureText(wkLabel).width + 6;
-      const wkH = 10.5;
-      const wkX = cx + cellPad + dayWidth + 4.5;
-      const wkY = cy + cellPad + Math.max(0, (dayNumSize - wkH) * 0.35);
-      drawRoundedRectPath(ctx, wkX, wkY, wkW, wkH, 3);
-      ctx.fillStyle = '#f1f5f9';
-      ctx.fill();
-      ctx.fillStyle = '#64748b';
+    if (styleConfig.monthYearAlignment === 'center') {
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(wkLabel, wkX + wkW / 2, wkY + wkH / 2 + 0.5);
+      ctx.fillText(joined, x + w / 2, baselineY);
+    } else if (styleConfig.monthYearAlignment === 'right') {
+      ctx.textAlign = 'right';
+      ctx.fillText(joined, x + w, baselineY);
+    } else if (styleConfig.monthYearAlignment === 'left') {
+      ctx.textAlign = 'left';
+      ctx.fillText(joined, x, baselineY);
+    } else {
+      // 'split': first part on the left, second part on the right
+      ctx.textAlign = 'left';
+      ctx.fillText(leftText, x, baselineY);
+      ctx.textAlign = 'right';
+      ctx.fillText(rightText, x + w, baselineY);
+    }
+    resetFontStretch(ctx);
+  };
+
+  // 3. DYNAMIC EDGE-TO-EDGE CALENDAR GRID (full detail: moon, holidays, events, week numbers)
+  const drawFullMonthGrid = (
+    gridX: number,
+    gridY: number,
+    gridW: number,
+    gridH: number,
+    gYear: number,
+    gMonth: number,
+    gHolidays: HolidayItem[],
+  ) => {
+    if (styleConfig.showGridShadow) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.05)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      drawRoundedRectPath(ctx, gridX, gridY, gridW, gridH, borderRadius);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
       ctx.restore();
     }
 
-    // Top Right: Moon Icon + Illumination % + Major Phase Label (if enabled)
-    if (showMoonPhases) {
-      const moonSize = Math.min(13, Math.max(11.5, rowH * 0.15));
-      const moonX = cx + colW - cellPad - moonSize;
-      const moonY = cy + cellPad;
+    const cells = buildCalendarMonthCells(gYear, gMonth);
+    const numRows = Math.ceil(cells.length / 7);
+    const weekdayHeaderH =
+      styleConfig.gridDensity === 'compact'
+        ? 24
+        : styleConfig.gridDensity === 'spacious'
+        ? 30
+        : 27;
+    const colW = gridW / 7;
+    const rowH = (gridH - weekdayHeaderH) / numRows;
+    const cellPad =
+      styleConfig.gridDensity === 'compact'
+        ? 5
+        : styleConfig.gridDensity === 'spacious'
+        ? 8
+        : 6.5;
 
-      drawCanvasMoonIcon(
-        ctx,
-        moonX,
-        moonY,
-        moonSize,
-        moon.category,
-        moon.illuminationPct,
-        moon.elongationDeg,
-        moon.majorPhaseLabel === 'Full Moon'
-      );
+    // Proportional day number size with configurable dateNumberSize ('sm' | 'md' | 'lg' | 'xl')
+    const baseDayNumSize = Math.min(18.5, Math.max(13.5, Math.min(colW, rowH) * 0.21));
+    const sizeScale =
+      styleConfig.dateNumberSize === 'sm'
+        ? 0.85
+        : styleConfig.dateNumberSize === 'lg'
+        ? 1.22
+        : styleConfig.dateNumberSize === 'xl'
+        ? 1.45
+        : 1.0;
+    const dayNumSize = Math.round(
+      (styleConfig.gridDensity === 'compact'
+        ? baseDayNumSize - 1
+        : styleConfig.gridDensity === 'spacious'
+        ? baseDayNumSize + 1
+        : baseDayNumSize) * sizeScale * 10
+    ) / 10;
 
-      ctx.fillStyle = '#64748b';
-      ctx.font = `500 7.2px ${MONO_FONT_STACK}`;
-      ctx.textAlign = 'right';
+    // Clip inside rounded grid container
+    ctx.save();
+    drawRoundedRectPath(ctx, gridX, gridY, gridW, gridH, borderRadius);
+    ctx.clip();
+
+    // Base cell fill
+    ctx.fillStyle = cellBgColor;
+    ctx.fillRect(gridX, gridY, gridW, gridH);
+
+    // Weekday Header Bar
+    ctx.fillStyle = weekdayBgColor;
+    ctx.fillRect(gridX, gridY, gridW, weekdayHeaderH);
+
+    // Subtle Sunday column header tint
+    ctx.save();
+    ctx.fillStyle = 'rgba(254, 226, 226, 0.22)';
+    ctx.fillRect(gridX, gridY, colW, weekdayHeaderH);
+    ctx.restore();
+
+    for (let col = 0; col < 7; col++) {
+      const isSunday = col === 0;
+      ctx.fillStyle = isSunday ? sundayColor : weekdayTextColor;
+      ctx.font = `${fontWeight} 11.5px ${fontFamily}`;
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const pctText = `${moon.illuminationPct}%`;
-      const pctX = moonX - 3.2;
-      const moonCenterY = moonY + moonSize / 2;
-      ctx.fillText(pctText, pctX, moonCenterY);
-
-      if (moon.isMajorPhase && moon.majorPhaseLabel) {
-        const pctWidth = ctx.measureText(pctText).width;
-        const shortPhase = formatMajorPhaseShort(moon.majorPhaseLabel);
-        const phaseX = pctX - pctWidth - 3.5;
-
-        ctx.fillStyle =
-          moon.majorPhaseLabel === 'Full Moon'
-            ? '#b45309'
-            : moon.majorPhaseLabel === 'New Moon'
-            ? '#334155'
-            : '#1d4ed8';
-        ctx.font = `700 7.5px ${fontFamily}`;
-        ctx.fillText(shortPhase, phaseX, moonCenterY);
-      }
+      ctx.fillText(
+        WEEKDAYS_SHORT[col],
+        gridX + col * colW + colW / 2,
+        gridY + weekdayHeaderH / 2 + 0.5
+      );
     }
 
-    // Bottom of Cell: Holidays & User Events
-    type BadgeItem =
-      | { kind: 'holiday'; holiday: HolidayItem }
-      | { kind: 'event'; event: UserEvent };
+    // Helper to compute calendar week number (1-53)
+    const getWeekNumber = (dateStr: string): number => {
+      const d = new Date(dateStr + 'T00:00:00');
+      const startOfYear = new Date(d.getFullYear(), 0, 1);
+      const diffDays = Math.floor((d.getTime() - startOfYear.getTime()) / 86400000);
+      return Math.max(1, Math.ceil((diffDays + startOfYear.getDay() + 1) / 7));
+    };
 
-    const badgeItems: BadgeItem[] = [
-      ...dayHolidays.map((holiday): BadgeItem => ({ kind: 'holiday', holiday })),
-      ...dayEvents.map((event): BadgeItem => ({ kind: 'event', event })),
-    ];
+    // Day Cells Content
+    for (let idx = 0; idx < cells.length; idx++) {
+      const cell = cells[idx];
+      const col = idx % 7;
+      const row = Math.floor(idx / 7);
+      const cx = gridX + col * colW;
+      const cy = gridY + weekdayHeaderH + row * rowH;
+      const isSunday = col === 0;
 
-    if (badgeItems.length > 0) {
-      const badgeH = Math.min(13.5, Math.max(11.5, rowH * 0.155));
-      const badgeFontPx = Math.min(8.4, Math.max(7.4, badgeH * 0.65));
-      const badgeGap = 2.2;
-      const maxTopY = cy + cellPad + dayNumSize + 3.5;
-      const availH = Math.max(0, cy + rowH - cellPad - maxTopY);
-      const maxSlots = Math.max(
-        1,
-        Math.floor((availH + badgeGap) / (badgeH + badgeGap))
-      );
+      const moon = getMoonPhaseForDate(cell.dateStr);
+      const dayHolidays = gHolidays.filter((h) => {
+        if (h.date !== cell.dateStr) return false;
+        if (h.type === 'cultural' && !showCultural) return false;
+        if ((h.type === 'regular' || h.type === 'special-non-working') && !showHolidays) return false;
+        return true;
+      });
+      const dayEvents = events.filter((e) => e.date === cell.dateStr);
+      const hasRegular = dayHolidays.some((h) => h.type === 'regular');
 
-      const hasOverflow = badgeItems.length > maxSlots && maxSlots >= 2;
-      const visibleBadges = hasOverflow
-        ? badgeItems.slice(0, maxSlots - 1)
-        : badgeItems.slice(0, maxSlots);
-      const hiddenCount = badgeItems.length - visibleBadges.length;
-      const totalRenderedRows = visibleBadges.length + (hasOverflow ? 1 : 0);
+      // Cell background
+      if (!cell.isCurrentMonth) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(cx, cy, colW, rowH);
+      } else if (hasRegular || isSunday) {
+        ctx.fillStyle = 'rgba(254, 242, 242, 0.35)';
+        ctx.fillRect(cx, cy, colW, rowH);
+      }
 
-      const totalStackH =
-        totalRenderedRows * badgeH + (totalRenderedRows - 1) * badgeGap;
-      let by = cy + rowH - cellPad - totalStackH;
-      const bx = cx + cellPad;
-      const bw = colW - cellPad * 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cx + 1, cy + 1, colW - 2, rowH - 2);
+      ctx.clip();
 
-      for (const item of visibleBadges) {
-        if (item.kind === 'holiday') {
-          const h = item.holiday;
-          const isReg = h.type === 'regular';
-          const isSpec = h.type === 'special-non-working';
+      if (!cell.isCurrentMonth) {
+        ctx.globalAlpha = 0.38;
+      }
 
-          const bgCol = isReg ? '#fee2e2' : isSpec ? '#f3e8ff' : '#fef3c7';
-          const txtCol = isReg ? '#991b1b' : isSpec ? '#6b21a8' : '#92400e';
-          const accentCol = isReg ? '#dc2626' : isSpec ? '#9333ea' : '#d97706';
-          const borderCol = isReg ? '#fecaca' : isSpec ? '#e9d5ff' : '#fde68a';
+      // Top Left: Day Number (using independent dateFontWeight & dateNumberSize)
+      const dayStr = String(cell.dayNumber);
+      ctx.fillStyle = hasRegular || isSunday ? sundayColor : dayNumberColor;
+      ctx.font = `${dateFontWeight} ${dayNumSize}px ${fontFamily}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(dayStr, cx + cellPad, cy + cellPad);
+      const dayNumRight = cx + cellPad + ctx.measureText(dayStr).width;
 
-          if (holidayBadgeStyle === 'minimal') {
-            ctx.fillStyle = accentCol;
-            ctx.beginPath();
-            ctx.arc(bx + 3, by + badgeH / 2, 2.3, 0, Math.PI * 2);
+      // Optional Week Number pill on the first column (Sunday) of each row
+      if (showWeekNumbers && col === 0) {
+        const dayWidth = ctx.measureText(dayStr).width;
+        const wkNum = getWeekNumber(cell.dateStr);
+        const wkLabel = `W${wkNum}`;
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.font = `600 7px ${MONO_FONT_STACK}`;
+        const wkW = ctx.measureText(wkLabel).width + 6;
+        const wkH = 10.5;
+        const wkX = cx + cellPad + dayWidth + 4.5;
+        const wkY = cy + cellPad + Math.max(0, (dayNumSize - wkH) * 0.35);
+        drawRoundedRectPath(ctx, wkX, wkY, wkW, wkH, 3);
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fill();
+        ctx.fillStyle = '#64748b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(wkLabel, wkX + wkW / 2, wkY + wkH / 2 + 0.5);
+        ctx.restore();
+      }
+
+      // Top Right: Moon Icon + Illumination % + Major Phase Label (if enabled)
+      if (showMoonPhases) {
+        const moonSize = Math.min(13, Math.max(11.5, rowH * 0.15));
+        const moonX = cx + colW - cellPad - moonSize;
+        const moonY = cy + cellPad;
+
+        drawCanvasMoonIcon(
+          ctx,
+          moonX,
+          moonY,
+          moonSize,
+          moon.category,
+          moon.illuminationPct,
+          moon.elongationDeg,
+          moon.majorPhaseLabel === 'Full Moon'
+        );
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = `500 7.2px ${MONO_FONT_STACK}`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        const pctText = `${moon.illuminationPct}%`;
+        const pctX = moonX - 3.2;
+        const moonCenterY = moonY + moonSize / 2;
+        ctx.fillText(pctText, pctX, moonCenterY);
+
+        if (moon.isMajorPhase && moon.majorPhaseLabel) {
+          const pctWidth = ctx.measureText(pctText).width;
+          const shortPhase = formatMajorPhaseShort(moon.majorPhaseLabel);
+          const phaseX = pctX - pctWidth - 3.5;
+
+          ctx.fillStyle =
+            moon.majorPhaseLabel === 'Full Moon'
+              ? '#b45309'
+              : moon.majorPhaseLabel === 'New Moon'
+              ? '#334155'
+              : '#1d4ed8';
+          ctx.font = `700 7.5px ${fontFamily}`;
+          // In narrow cells (e.g. two months per page) skip the text label rather than overlap the day number
+          if (phaseX - ctx.measureText(shortPhase).width > dayNumRight + 3) {
+            ctx.fillText(shortPhase, phaseX, moonCenterY);
+          }
+        }
+      }
+
+      // Bottom of Cell: Holidays & User Events
+      type BadgeItem =
+        | { kind: 'holiday'; holiday: HolidayItem }
+        | { kind: 'event'; event: UserEvent };
+
+      const badgeItems: BadgeItem[] = [
+        ...dayHolidays.map((holiday): BadgeItem => ({ kind: 'holiday', holiday })),
+        ...dayEvents.map((event): BadgeItem => ({ kind: 'event', event })),
+      ];
+
+      if (badgeItems.length > 0) {
+        const badgeH = Math.min(13.5, Math.max(11.5, rowH * 0.155));
+        const badgeFontPx = Math.min(8.4, Math.max(7.4, badgeH * 0.65));
+        const badgeGap = 2.2;
+        const maxTopY = cy + cellPad + dayNumSize + 3.5;
+        const availH = Math.max(0, cy + rowH - cellPad - maxTopY);
+        const maxSlots = Math.max(
+          1,
+          Math.floor((availH + badgeGap) / (badgeH + badgeGap))
+        );
+
+        const hasOverflow = badgeItems.length > maxSlots && maxSlots >= 2;
+        const visibleBadges = hasOverflow
+          ? badgeItems.slice(0, maxSlots - 1)
+          : badgeItems.slice(0, maxSlots);
+        const hiddenCount = badgeItems.length - visibleBadges.length;
+        const totalRenderedRows = visibleBadges.length + (hasOverflow ? 1 : 0);
+
+        const totalStackH =
+          totalRenderedRows * badgeH + (totalRenderedRows - 1) * badgeGap;
+        let by = cy + rowH - cellPad - totalStackH;
+        const bx = cx + cellPad;
+        const bw = colW - cellPad * 2;
+
+        for (const item of visibleBadges) {
+          if (item.kind === 'holiday') {
+            const h = item.holiday;
+            const isReg = h.type === 'regular';
+            const isSpec = h.type === 'special-non-working';
+
+            const bgCol = isReg ? '#fee2e2' : isSpec ? '#f3e8ff' : '#fef3c7';
+            const txtCol = isReg ? '#991b1b' : isSpec ? '#6b21a8' : '#92400e';
+            const accentCol = isReg ? '#dc2626' : isSpec ? '#9333ea' : '#d97706';
+            const borderCol = isReg ? '#fecaca' : isSpec ? '#e9d5ff' : '#fde68a';
+
+            if (holidayBadgeStyle === 'minimal') {
+              ctx.fillStyle = accentCol;
+              ctx.beginPath();
+              ctx.arc(bx + 3, by + badgeH / 2, 2.3, 0, Math.PI * 2);
+              ctx.fill();
+
+              ctx.fillStyle = '#1e293b';
+              ctx.font = `600 ${badgeFontPx}px ${fontFamily}`;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(
+                truncateTextToWidth(ctx, h.name, bw - 9),
+                bx + 8,
+                by + badgeH / 2 + 0.5
+              );
+            } else if (holidayBadgeStyle === 'pill') {
+              drawRoundedRectPath(ctx, bx, by, bw, badgeH, badgeH / 2);
+              ctx.fillStyle = bgCol;
+              ctx.fill();
+              ctx.strokeStyle = borderCol;
+              ctx.lineWidth = 0.75;
+              ctx.stroke();
+
+              ctx.fillStyle = txtCol;
+              ctx.font = `700 ${badgeFontPx}px ${fontFamily}`;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(
+                truncateTextToWidth(ctx, h.name, bw - 10),
+                bx + 5.5,
+                by + badgeH / 2 + 0.5
+              );
+            } else {
+              // 'stripe'
+              ctx.save();
+              drawRoundedRectPath(ctx, bx, by, bw, badgeH, 2.5);
+              ctx.fillStyle = bgCol;
+              ctx.fill();
+              ctx.clip();
+
+              ctx.fillStyle = accentCol;
+              ctx.fillRect(bx, by, 2.8, badgeH);
+              ctx.restore();
+
+              ctx.fillStyle = txtCol;
+              ctx.font = `700 ${badgeFontPx}px ${fontFamily}`;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(
+                truncateTextToWidth(ctx, h.name, bw - 9.5),
+                bx + 5.8,
+                by + badgeH / 2 + 0.5
+              );
+            }
+          } else {
+            const ev = item.event;
+            ctx.save();
+            drawRoundedRectPath(ctx, bx, by, bw, badgeH, 2.5);
+            ctx.fillStyle = '#eef2ff';
             ctx.fill();
+            ctx.clip();
 
-            ctx.fillStyle = '#1e293b';
+            ctx.fillStyle = '#6366f1';
+            ctx.fillRect(bx, by, 2.8, badgeH);
+            ctx.restore();
+
+            ctx.fillStyle = '#3730a3';
             ctx.font = `600 ${badgeFontPx}px ${fontFamily}`;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             ctx.fillText(
-              truncateTextToWidth(ctx, h.name, bw - 9),
-              bx + 8,
-              by + badgeH / 2 + 0.5
-            );
-          } else if (holidayBadgeStyle === 'pill') {
-            drawRoundedRectPath(ctx, bx, by, bw, badgeH, badgeH / 2);
-            ctx.fillStyle = bgCol;
-            ctx.fill();
-            ctx.strokeStyle = borderCol;
-            ctx.lineWidth = 0.75;
-            ctx.stroke();
-
-            ctx.fillStyle = txtCol;
-            ctx.font = `700 ${badgeFontPx}px ${fontFamily}`;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(
-              truncateTextToWidth(ctx, h.name, bw - 10),
+              truncateTextToWidth(ctx, `• ${ev.title}`, bw - 9.5),
               bx + 5.5,
               by + badgeH / 2 + 0.5
             );
-          } else {
-            // 'stripe'
-            ctx.save();
-            drawRoundedRectPath(ctx, bx, by, bw, badgeH, 2.5);
-            ctx.fillStyle = bgCol;
-            ctx.fill();
-            ctx.clip();
-
-            ctx.fillStyle = accentCol;
-            ctx.fillRect(bx, by, 2.8, badgeH);
-            ctx.restore();
-
-            ctx.fillStyle = txtCol;
-            ctx.font = `700 ${badgeFontPx}px ${fontFamily}`;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(
-              truncateTextToWidth(ctx, h.name, bw - 9.5),
-              bx + 5.8,
-              by + badgeH / 2 + 0.5
-            );
           }
-        } else {
-          const ev = item.event;
-          ctx.save();
-          drawRoundedRectPath(ctx, bx, by, bw, badgeH, 2.5);
-          ctx.fillStyle = '#eef2ff';
-          ctx.fill();
-          ctx.clip();
 
-          ctx.fillStyle = '#6366f1';
-          ctx.fillRect(bx, by, 2.8, badgeH);
-          ctx.restore();
-
-          ctx.fillStyle = '#3730a3';
-          ctx.font = `600 ${badgeFontPx}px ${fontFamily}`;
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(
-            truncateTextToWidth(ctx, `• ${ev.title}`, bw - 9.5),
-            bx + 5.5,
-            by + badgeH / 2 + 0.5
-          );
+          by += badgeH + badgeGap;
         }
 
-        by += badgeH + badgeGap;
+        if (hasOverflow && hiddenCount > 0) {
+          drawRoundedRectPath(ctx, bx, by, bw, badgeH, 2.5);
+          ctx.fillStyle = '#f1f5f9';
+          ctx.fill();
+          ctx.fillStyle = '#475569';
+          ctx.font = `600 ${badgeFontPx - 0.5}px ${fontFamily}`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`+${hiddenCount} more`, bx + 5, by + badgeH / 2 + 0.5);
+        }
       }
 
-      if (hasOverflow && hiddenCount > 0) {
-        drawRoundedRectPath(ctx, bx, by, bw, badgeH, 2.5);
-        ctx.fillStyle = '#f1f5f9';
-        ctx.fill();
-        ctx.fillStyle = '#475569';
-        ctx.font = `600 ${badgeFontPx - 0.5}px ${fontFamily}`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`+${hiddenCount} more`, bx + 5, by + badgeH / 2 + 0.5);
-      }
+      ctx.restore();
     }
 
+    // Grid Internal Divider Lines (crisp hairline weight)
+    const innerLineWidth = Math.max(0.75, borderWidth * 0.8);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = innerLineWidth;
+
+    // Weekday bottom line
+    ctx.beginPath();
+    ctx.moveTo(gridX, gridY + weekdayHeaderH);
+    ctx.lineTo(gridX + gridW, gridY + weekdayHeaderH);
+    ctx.stroke();
+
+    // Vertical column lines
+    for (let col = 1; col < 7; col++) {
+      const lx = gridX + col * colW;
+      ctx.beginPath();
+      ctx.moveTo(lx, gridY);
+      ctx.lineTo(lx, gridY + gridH);
+      ctx.stroke();
+    }
+
+    // Horizontal row lines
+    for (let row = 1; row < numRows; row++) {
+      const ly = gridY + weekdayHeaderH + row * rowH;
+      ctx.beginPath();
+      ctx.moveTo(gridX, ly);
+      ctx.lineTo(gridX + gridW, ly);
+      ctx.stroke();
+    }
+
+    ctx.restore(); // undo grid clip
+
+    // Outer Grid Rounded Border (authoritative frame stroke)
+    ctx.save();
+    drawRoundedRectPath(ctx, gridX, gridY, gridW, gridH, borderRadius);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = Math.max(1.1, borderWidth);
+    ctx.stroke();
     ctx.restore();
-  }
+  };
 
-  // Grid Internal Divider Lines (crisp hairline weight)
-  const innerLineWidth = Math.max(0.75, borderWidth * 0.8);
-  ctx.strokeStyle = borderColor;
-  ctx.lineWidth = innerLineWidth;
+  // 3b. COMPACT MONTH (mini previous/next month and the 12-months-on-one-page layout)
+  const drawMiniMonth = (mx: number, my: number, mw: number, mh: number, ref: MonthRef, withYear: boolean) => {
+    const miniRadius = Math.min(borderRadius, 8);
+    const miniHolidays = getHolidaysForMonth(ref.year, ref.month);
+    const miniCells = buildCalendarMonthCells(ref.year, ref.month);
+    const miniRows = 6; // fixed pitch: 4-, 5- and 6-week months all share the same cell size
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-  // Weekday bottom line
-  ctx.beginPath();
-  ctx.moveTo(gridX, gridY + weekdayHeaderH);
-  ctx.lineTo(gridX + gridW, gridY + weekdayHeaderH);
-  ctx.stroke();
+    ctx.save();
+    drawRoundedRectPath(ctx, mx, my, mw, mh, miniRadius);
+    ctx.fillStyle = cellBgColor;
+    ctx.fill();
+    ctx.save();
+    drawRoundedRectPath(ctx, mx, my, mw, mh, miniRadius);
+    ctx.clip();
 
-  // Vertical column lines
-  for (let col = 1; col < 7; col++) {
-    const lx = gridX + col * colW;
-    ctx.beginPath();
-    ctx.moveTo(lx, gridY);
-    ctx.lineTo(lx, gridY + gridH);
+    // Month name band
+    const nameH = clamp(mh * 0.13, 14, 26);
+    ctx.fillStyle = weekdayBgColor;
+    ctx.fillRect(mx, my, mw, nameH);
+    const label = MONTH_NAMES[ref.month - 1].toUpperCase() + (withYear ? ` ${ref.year}` : '');
+    const labelSize = clamp(nameH * 0.58, 7, 13);
+    ctx.fillStyle = titleTextColor;
+    ctx.font = `${fontWeight} ${labelSize}px ${fontFamily}`;
+    const labelW = ctx.measureText(label).width;
+    if (labelW > mw - 8) {
+      ctx.font = `${fontWeight} ${Math.max(6, labelSize * ((mw - 8) / labelW))}px ${fontFamily}`;
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, mx + mw / 2, my + nameH / 2 + 0.5);
+
+    // Weekday initials
+    const wkH = clamp(mh * 0.08, 9, 16);
+    const colW = mw / 7;
+    const rowH = (mh - nameH - wkH) / miniRows;
+    const initials = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    ctx.font = `600 ${clamp(wkH * 0.62, 5, 9)}px ${fontFamily}`;
+    for (let col = 0; col < 7; col++) {
+      ctx.fillStyle = col === 0 ? sundayColor : weekdayTextColor;
+      ctx.fillText(initials[col], mx + col * colW + colW / 2, my + nameH + wkH / 2 + 0.5);
+    }
+
+    // Day numbers (current month only), tinted when a holiday or event falls on the day
+    const numSize = clamp(Math.min(colW * 0.62, rowH * 0.5), 5, 14);
+    const tintR = Math.min(colW, rowH) * 0.43;
+    for (let idx = 0; idx < miniCells.length; idx++) {
+      const cell = miniCells[idx];
+      if (!cell.isCurrentMonth) continue;
+      const col = idx % 7;
+      const row = Math.floor(idx / 7);
+      const cx = mx + col * colW + colW / 2;
+      const cy = my + nameH + wkH + row * rowH + rowH / 2;
+
+      const dayHolidays = miniHolidays.filter((h) => {
+        if (h.date !== cell.dateStr) return false;
+        if (h.type === 'cultural' && !showCultural) return false;
+        if ((h.type === 'regular' || h.type === 'special-non-working') && !showHolidays) return false;
+        return true;
+      });
+      const hasEvent = events.some((e) => e.date === cell.dateStr);
+      const isRegular = dayHolidays.some((h) => h.type === 'regular');
+      const isSpecial = dayHolidays.some((h) => h.type === 'special-non-working');
+
+      const tint = isRegular
+        ? '#fee2e2'
+        : isSpecial
+        ? '#f3e8ff'
+        : dayHolidays.length > 0
+        ? '#fef3c7'
+        : hasEvent
+        ? '#e0e7ff'
+        : null;
+      if (tint) {
+        ctx.fillStyle = tint;
+        ctx.beginPath();
+        ctx.arc(cx, cy, tintR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = isRegular || col === 0 ? sundayColor : dayNumberColor;
+      ctx.font = `${dateFontWeight} ${numSize}px ${fontFamily}`;
+      ctx.fillText(String(cell.dayNumber), cx, cy + 0.5);
+    }
+    ctx.restore(); // undo clip
+
+    drawRoundedRectPath(ctx, mx, my, mw, mh, miniRadius);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = Math.max(0.8, borderWidth * 0.8);
     ctx.stroke();
+    ctx.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // PAGE LAYOUT
+  // ---------------------------------------------------------------------------
+  const layout: PageLayoutOption = styleConfig.pageLayout || 'classic';
+  const showMoonKey = showMoonPhases && layout !== 'year';
+  const hasFooterBar = showMoonKey || showHolidays;
+  const footerH = hasFooterBar ? 23 : 0;
+  const footerY = contentBottom - footerH;
+
+  const showMemoLines = Boolean(styleConfig.showMemoLines) && (layout === 'classic' || layout === 'single');
+  const memoBoxH = showMemoLines ? (isLandscape ? 54 : 68) : 0;
+  const memoBoxY = (hasFooterBar ? footerY - 7 : contentBottom) - memoBoxH;
+  const bodyBottom = showMemoLines ? memoBoxY - 8 : hasFooterBar ? footerY - 7 : contentBottom;
+
+  const monthUpperOf = (m: number) => MONTH_NAMES[m - 1].toUpperCase();
+
+  if (layout === 'classic' || layout === 'year') {
+    if (advertConfig.enabled) {
+      drawBanner(contentX, curY, contentW, naturalBannerH, 1);
+      curY += naturalBannerH + 11;
+    }
+
+    drawTitleText(
+      contentX,
+      contentW,
+      curY + classicTitleH * 0.75,
+      classicTitleSize,
+      layout === 'year' ? 'JANUARY – DECEMBER' : monthUpperOf(month),
+      String(year),
+    );
+    curY += classicTitleH + 8;
+
+    if (layout === 'classic') {
+      drawFullMonthGrid(contentX, curY, contentW, Math.max(180, bodyBottom - curY), year, month, holidays);
+    } else {
+      // 12 compact months on one page: 4x3 in landscape, 3x4 in portrait
+      const cols = isLandscape ? 4 : 3;
+      const rows = 12 / cols;
+      const gap = 10;
+      const cellW = (contentW - gap * (cols - 1)) / cols;
+      const cellH = (bodyBottom - curY - gap * (rows - 1)) / rows;
+      for (let i = 0; i < 12; i++) {
+        drawMiniMonth(
+          contentX + (i % cols) * (cellW + gap),
+          curY + Math.floor(i / cols) * (cellH + gap),
+          cellW,
+          cellH,
+          { year, month: i + 1 },
+          false,
+        );
+      }
+    }
+  } else {
+    // 'single' (header 35-40%, one month) and 'double' (header 25-35%, two months)
+    const zoneTop = curY;
+    const zoneGap = 10;
+    const zoneH = Math.round(((contentBottom - zoneTop) * getHeaderPct(styleConfig)) / 100);
+    const pageMonths = getMonthsOnPage(year, month, layout);
+    const minis = getAdjacentMiniMonths(year, month, layout, styleConfig.miniMonths || 'none');
+
+    // Mini previous / next months sit on the right of the header zone (side by side, or stacked if taller)
+    let miniBlockW = 0;
+    if (minis.length > 0) {
+      const n = minis.length;
+      const MINI_BASE_H = 30;
+      const MINI_H_PER_W = 0.78;
+      const miniGap = 8;
+      const rowW = Math.min(
+        (zoneH - MINI_BASE_H) / MINI_H_PER_W,
+        (contentW * 0.42 - (n - 1) * miniGap) / n,
+        260,
+      );
+      const stackW =
+        n > 1
+          ? Math.min(((zoneH - (n - 1) * miniGap) / n - MINI_BASE_H) / MINI_H_PER_W, contentW * 0.25, 260)
+          : 0;
+      const stacked = n > 1 && stackW > rowW;
+      const miniW = Math.max(60, stacked ? stackW : rowW);
+      const miniH = MINI_BASE_H + miniW * MINI_H_PER_W;
+      const blockW = stacked ? miniW : n * miniW + (n - 1) * miniGap;
+      const blockH = stacked ? n * miniH + (n - 1) * miniGap : miniH;
+      const blockX = contentX + contentW - blockW;
+      const blockY = zoneTop + Math.max(0, (zoneH - blockH) / 2);
+      miniBlockW = blockW;
+
+      minis.forEach((ref, i) => {
+        drawMiniMonth(
+          stacked ? blockX : blockX + i * (miniW + miniGap),
+          stacked ? blockY + i * (miniH + miniGap) : blockY,
+          miniW,
+          miniH,
+          ref,
+          ref.year !== year,
+        );
+      });
+    }
+
+    const panelW = miniBlockW > 0 ? contentW - miniBlockW - zoneGap : contentW;
+
+    if (advertConfig.enabled) {
+      if (layout === 'single') {
+        // Banner on top, large month title underneath - together they fill the header zone
+        const titleSize = Math.min(44, Math.max(classicTitleSize, zoneH * 0.15));
+        const titleRowH = titleSize * 1.25;
+        const bannerBoxH = Math.max(naturalBannerH, zoneH - titleRowH - 8);
+        drawBanner(contentX, zoneTop, panelW, bannerBoxH, bannerScaleFor(bannerBoxH, panelW));
+        drawTitleText(
+          contentX,
+          panelW,
+          zoneTop + bannerBoxH + 8 + titleRowH * 0.78,
+          titleSize,
+          monthUpperOf(month),
+          String(year),
+        );
+      } else {
+        drawBanner(contentX, zoneTop, panelW, zoneH, bannerScaleFor(zoneH, panelW));
+      }
+    } else {
+      // No banner: a large headline fills the header zone instead
+      const first = pageMonths[0];
+      const last = pageMonths[pageMonths.length - 1];
+      const sameYear = first.year === last.year;
+      const headlineLeft =
+        pageMonths.length === 1
+          ? monthUpperOf(first.month)
+          : sameYear
+          ? `${monthUpperOf(first.month)} – ${monthUpperOf(last.month)}`
+          : `${monthUpperOf(first.month)} ${first.year} –`;
+      const headlineRight =
+        pageMonths.length === 1 || sameYear ? String(first.year) : `${monthUpperOf(last.month)} ${last.year}`;
+      const headlineSize = Math.min(78, Math.max(30, zoneH * 0.34));
+      const baseline = zoneTop + zoneH / 2 + headlineSize * 0.3;
+      drawTitleText(contentX, panelW, baseline, headlineSize, headlineLeft, headlineRight);
+
+      ctx.save();
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = Math.max(1.1, borderWidth);
+      ctx.beginPath();
+      ctx.moveTo(contentX, baseline + headlineSize * 0.3);
+      ctx.lineTo(contentX + panelW, baseline + headlineSize * 0.3);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const calTop = zoneTop + zoneH + zoneGap;
+    if (layout === 'single') {
+      drawFullMonthGrid(contentX, calTop, contentW, Math.max(180, bodyBottom - calTop), year, month, holidays);
+    } else {
+      // Two months: side by side in landscape, stacked in portrait
+      const gap = 14;
+      const bodyH = Math.max(200, bodyBottom - calTop);
+      const stackedMonths = !isLandscape;
+      const unitW = stackedMonths ? contentW : (contentW - gap) / 2;
+      const unitH = stackedMonths ? (bodyH - gap) / 2 : bodyH;
+      const subTitleSize = Math.min(22, Math.max(13, unitH * 0.06));
+      const subTitleH = subTitleSize * 1.45;
+
+      pageMonths.forEach((pm, i) => {
+        const ux = stackedMonths ? contentX : contentX + i * (unitW + gap);
+        const uy = stackedMonths ? calTop + i * (unitH + gap) : calTop;
+        drawTitleText(ux, unitW, uy + subTitleH * 0.78, subTitleSize, monthUpperOf(pm.month), String(pm.year));
+        drawFullMonthGrid(
+          ux,
+          uy + subTitleH + 4,
+          unitW,
+          unitH - subTitleH - 4,
+          pm.year,
+          pm.month,
+          i === 0 ? holidays : getHolidaysForMonth(pm.year, pm.month),
+        );
+      });
+    }
   }
-
-  // Horizontal row lines
-  for (let row = 1; row < numRows; row++) {
-    const ly = gridY + weekdayHeaderH + row * rowH;
-    ctx.beginPath();
-    ctx.moveTo(gridX, ly);
-    ctx.lineTo(gridX + gridW, ly);
-    ctx.stroke();
-  }
-
-  ctx.restore(); // undo grid clip
-
-  // Outer Grid Rounded Border (authoritative frame stroke)
-  ctx.save();
-  drawRoundedRectPath(ctx, gridX, gridY, gridW, gridH, borderRadius);
-  ctx.strokeStyle = borderColor;
-  ctx.lineWidth = Math.max(1.1, borderWidth);
-  ctx.stroke();
-  ctx.restore();
 
   // 3.5 OPTIONAL PRINTABLE MONTHLY NOTES & REMINDERS RULED BOX
   if (showMemoLines) {
@@ -1267,7 +1610,7 @@ export function renderCalendarSheetToCanvas(
 
     const footerCenterY = footerY + footerH * 0.62;
 
-    if (showMoonPhases) {
+    if (showMoonKey) {
       let fx = contentX;
       ctx.fillStyle = '#3f3f46';
       ctx.font = `700 8.8px ${fontFamily}`;
@@ -1375,7 +1718,8 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
       ? await loadHeaderImage(effectiveStyle.headerImage.url)
       : null;
 
-  const paperFormat = effectiveStyle.paperSize === 'letter' ? 'letter' : 'a4';
+  const paperFormat: PaperSizeOption = effectiveStyle.paperSize || 'a4';
+  const pageLayout: PageLayoutOption = effectiveStyle.pageLayout || 'classic';
   const dims = getPaperDimensions(paperFormat, orientation);
 
   const doc = new jsPDF({
@@ -1386,9 +1730,15 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
     precision: 16,
   });
 
-  const fileSuffix = fullYear
-    ? `FullYear_${year}`
-    : `${MONTH_NAMES[month - 1]}_${year}`;
+  const nextMonthName = MONTH_NAMES[shiftMonth(year, month, 1).month - 1];
+  const fileSuffix =
+    pageLayout === 'year'
+      ? `YearAtAGlance_${year}`
+      : fullYear
+      ? `FullYear_${year}`
+      : pageLayout === 'double'
+      ? `${MONTH_NAMES[month - 1]}-${nextMonthName}_${year}`
+      : `${MONTH_NAMES[month - 1]}_${year}`;
 
   doc.setProperties({
     title: `DatePoint Calendar - ${fileSuffix.replace('_', ' ')}`,
@@ -1397,14 +1747,12 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
     creator: 'DatePoint 1=1 Print Engine',
   });
 
-  const monthsToRender = fullYear
-    ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    : [month];
+  const monthsToRender = getPdfPageAnchors(month, pageLayout, fullYear);
 
   // Ultra-HD supersampling scale for razor-sharp typography, borders, and lunar vectors
   const renderScale =
     dpiQuality === 'ultra-450'
-      ? fullYear
+      ? monthsToRender.length > 1 || pageLayout === 'year'
         ? 4.0
         : 4.5
       : 3.2;
@@ -1442,5 +1790,5 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
     );
   });
 
-  doc.save(`DatePoint_Calendar_${fileSuffix}_${orientation}.pdf`);
+  doc.save(`DatePoint_Calendar_${fileSuffix}_${paperFormat.toUpperCase()}_${orientation}.pdf`);
 }

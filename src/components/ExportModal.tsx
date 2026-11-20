@@ -3,6 +3,7 @@ import { AdvertConfig, UserEvent, CalendarStyleConfig } from '../types';
 import { 
   exportCalendarToPdf, 
   getPaperDimensions, 
+  getPdfPageAnchors, 
   loadHeaderImage, 
   renderCalendarSheetToCanvas 
 } from '../utils/pdfExport';
@@ -65,6 +66,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     printOrientation: orientation,
   };
   const dims = getPaperDimensions(effectiveStyle.paperSize || 'a4', orientation);
+  const pageLayout = effectiveStyle.pageLayout || 'classic';
+  const fullYearPages = getPdfPageAnchors(month, pageLayout, true).length;
 
   useEffect(() => {
     let active = true;
@@ -199,12 +202,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 >
                   <ToggleButton id="month">
                     <Calendar className="size-4" />
-                    <span>Current Month ({MONTH_NAMES[month - 1]} {year})</span>
+                    <span>
+                      {pageLayout === 'year'
+                        ? `Year ${year} (12 months, 1 page)`
+                        : pageLayout === 'double'
+                        ? `Current Months (${MONTH_NAMES[month - 1]} & ${MONTH_NAMES[month % 12]} ${year})`
+                        : `Current Month (${MONTH_NAMES[month - 1]} ${year})`}
+                    </span>
                   </ToggleButton>
                   <ToggleButton id="year">
                     <ToggleButtonGroup.Separator />
                     <BookOpen className="size-4" />
-                    <span>Full Year {year} (12 Pages)</span>
+                    <span>
+                      Full Year {year} ({fullYearPages} {fullYearPages === 1 ? 'Page' : 'Pages'})
+                    </span>
                   </ToggleButton>
                 </ToggleButtonGroup>
               </div>
