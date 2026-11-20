@@ -201,10 +201,10 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
                   type="button"
                   onClick={() => onEditWizardSteps?.('recipient')}
                   className="cursor-pointer"
-                  title="Edit Step 1: Who Is It For?"
+                  title="Edit Step 1: Paper & Purpose"
                 >
                   <Chip size="sm" variant="soft" color="default">
-                    1. {recipientLabel}
+                    1. {styleConfig.paperSize.toUpperCase()} • {recipientLabel}
                   </Chip>
                 </button>
 
@@ -250,11 +250,10 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
                   type="button"
                   onClick={() => onEditWizardSteps?.('paper')}
                   className="cursor-pointer"
-                  title="Edit Step 5: Paper & Punch-Holes"
+                  title="Edit Step 5: Punch-Holes & Notes"
                 >
                   <Chip size="sm" variant="soft" color="accent" className="uppercase font-mono">
-                    5. {styleConfig.paperSize} • {styleConfig.printOrientation} • Holes:{' '}
-                    {styleConfig.showHolePunchGuide ? 'Yes' : 'No'}
+                    5. Holes: {styleConfig.showHolePunchGuide ? 'Yes' : 'No'} • {styleConfig.printMargin}mm
                   </Chip>
                 </button>
               </div>

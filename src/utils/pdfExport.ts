@@ -515,6 +515,8 @@ export interface RenderSheetParams {
   events: UserEvent[];
   headerImg?: HTMLImageElement | null;
   scale?: number;
+  /** Editing previews only: show faint placeholder text for empty fields. Never used for print/PDF. */
+  showPlaceholders?: boolean;
 }
 
 /**
@@ -534,6 +536,7 @@ export function renderCalendarSheetToCanvas(
     events,
     headerImg = getCachedHeaderImage(styleConfig.headerImage?.url),
     scale = 3.5,
+    showPlaceholders = false,
   } = params;
 
   const orientation = styleConfig.printOrientation || 'landscape';
@@ -813,27 +816,41 @@ export function renderCalendarSheetToCanvas(
 
     // Left: Business Name & Tagline
     const hasTagline = Boolean(advertConfig.tagline && advertConfig.tagline.trim());
+    const nameIsPlaceholder = showPlaceholders && !(advertConfig.businessName || '').trim();
+    const taglineIsPlaceholder = nameIsPlaceholder && !hasTagline && contactEntries.length === 0;
+    const showSubtitle = hasTagline || taglineIsPlaceholder;
     const titleFontSize = isLandscape ? 18 : 16;
     ctx.fillStyle = styleConfig.headerTextColor || '#ffffff';
+    const bannerNameText = nameIsPlaceholder
+      ? 'YOUR BUSINESS NAME'
+      : (advertConfig.businessName || '').toUpperCase();
+    ctx.globalAlpha = nameIsPlaceholder ? 0.45 : 1;
     setTitleFont(ctx, fontWeight, titleFontSize, fontFamily, titleAxes);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(
-      truncateTextToWidth(ctx, (advertConfig.businessName || '').toUpperCase(), maxBrandW),
+      truncateTextToWidth(ctx, bannerNameText, maxBrandW),
       leftCursorX,
-      hasTagline ? bannerY + bannerH / 2 - 9.5 : bannerY + bannerH / 2
+      showSubtitle ? bannerY + bannerH / 2 - 9.5 : bannerY + bannerH / 2
     );
     resetFontStretch(ctx);
+    ctx.globalAlpha = 1;
 
-    if (hasTagline) {
+    if (showSubtitle) {
       ctx.save();
-      if (!showHeaderAccent) {
+      if (taglineIsPlaceholder) {
+        ctx.globalAlpha = 0.38;
+      } else if (!showHeaderAccent) {
         ctx.globalAlpha = 0.92;
       }
-      ctx.fillStyle = accentIconColor;
+      ctx.fillStyle = taglineIsPlaceholder ? (styleConfig.headerTextColor || '#ffffff') : accentIconColor;
       ctx.font = `500 11px ${fontFamily}`;
       ctx.fillText(
-        truncateTextToWidth(ctx, advertConfig.tagline.trim(), maxBrandW),
+        truncateTextToWidth(
+          ctx,
+          taglineIsPlaceholder ? 'Add your banner details in Step 1' : advertConfig.tagline.trim(),
+          maxBrandW
+        ),
         leftCursorX,
         bannerY + bannerH / 2 + 11.5
       );
