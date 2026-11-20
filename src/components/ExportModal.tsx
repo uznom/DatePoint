@@ -75,7 +75,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     if (!canvas) return;
 
     const renderPreview = async () => {
-      const url = effectiveStyle.headerImage?.enabled ? effectiveStyle.headerImage?.url : undefined;
+      const url =
+        effectiveStyle.headerImage?.enabled || advertConfig.imageOnly
+          ? effectiveStyle.headerImage?.url
+          : undefined;
       const headerImg = url ? await loadHeaderImage(url) : null;
       if (!active || !previewCanvasRef.current) return;
 

@@ -87,7 +87,10 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
   // Load header emblem/logo image whenever URL changes
   useEffect(() => {
     let active = true;
-    const url = styleConfig.headerImage?.enabled ? styleConfig.headerImage?.url : undefined;
+    const url =
+      styleConfig.headerImage?.enabled || advertConfig.imageOnly
+        ? styleConfig.headerImage?.url
+        : undefined;
     if (!url) {
       setLoadedHeaderImg(null);
       return;
@@ -100,7 +103,7 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
     return () => {
       active = false;
     };
-  }, [styleConfig.headerImage?.enabled, styleConfig.headerImage?.url]);
+  }, [styleConfig.headerImage?.enabled, styleConfig.headerImage?.url, advertConfig.imageOnly]);
 
   // Re-trigger canvas render once web fonts finish loading
   useEffect(() => {
@@ -167,14 +170,14 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
     }
   };
 
-  const recipientLabel =
-    styleConfig.recipientType === 'personal'
-      ? 'Personal & Household'
-      : styleConfig.recipientType === 'civic'
-      ? 'Civic & Community'
-      : styleConfig.recipientType === 'maritime'
-      ? 'Maritime & Agriculture'
-      : 'Business & Commercial';
+  const layoutLabel =
+    styleConfig.pageLayout === 'single'
+      ? 'Single Month'
+      : styleConfig.pageLayout === 'double'
+      ? 'Double Month'
+      : styleConfig.pageLayout === 'year'
+      ? '12 Months'
+      : 'Classic';
 
   return (
     <div className={printOnly ? 'hidden print:block' : 'space-y-3 sm:space-y-4'}>
@@ -201,10 +204,10 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
                   type="button"
                   onClick={() => onEditWizardSteps?.('recipient')}
                   className="cursor-pointer"
-                  title="Edit Step 1: Paper & Purpose"
+                  title="Edit Step 1: Paper & Header"
                 >
                   <Chip size="sm" variant="soft" color="default">
-                    1. {styleConfig.paperSize.toUpperCase()} • {recipientLabel}
+                    1. {styleConfig.paperSize.toUpperCase()} • {layoutLabel}
                   </Chip>
                 </button>
 

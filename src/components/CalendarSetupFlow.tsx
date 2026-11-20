@@ -6,19 +6,16 @@ import {
   FontWeightOption,
   HeaderImagePlacement,
   HolidayItem,
-  MiniMonthsOption,
   PageLayoutOption,
   PaperSizeOption,
   TitleAlignment,
   UserEvent,
 } from '../types';
 import { EventForm } from './wizard/EventForm';
-import { PRESET_SPONSORS } from './AdvertHeader';
 import {
   EMBLEM_PRESETS,
   FONT_STRETCH_STEPS,
   MAX_TITLE_SLANT,
-  MINI_MONTH_OPTIONS,
   PAGE_LAYOUTS,
   fontSupportsWidth,
   getHeaderPct,
@@ -26,6 +23,7 @@ import {
 } from '../utils/stylePresets';
 import {
   getPaperDimensions,
+  getRecommendedHeaderImageDimensions,
   loadHeaderImage,
   renderCalendarSheetToCanvas,
 } from '../utils/pdfExport';
@@ -118,7 +116,7 @@ export const WIZARD_STEPS: Array<{
   label: string;
   shortLabel: string;
 }> = [
-  { id: 'recipient', number: 1, label: '1. Paper & Purpose', shortLabel: '1. Paper' },
+  { id: 'recipient', number: 1, label: '1. Paper & Header', shortLabel: '1. Setup' },
   { id: 'typography', number: 2, label: '2. Fonts & Typography', shortLabel: '2. Fonts' },
   { id: 'colors', number: 3, label: '3. Colors & Style', shortLabel: '3. Style' },
   { id: 'content', number: 4, label: '4. Moon & Holidays', shortLabel: '4. Content' },
@@ -306,7 +304,10 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
   // Load header emblem for live preview canvas
   useEffect(() => {
     let active = true;
-    const url = styleConfig.headerImage?.enabled ? styleConfig.headerImage?.url : undefined;
+    const url =
+      styleConfig.headerImage?.enabled || advertConfig.imageOnly
+        ? styleConfig.headerImage?.url
+        : undefined;
     if (!url) {
       setLoadedHeaderImg(null);
       return;
@@ -317,7 +318,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
     return () => {
       active = false;
     };
-  }, [styleConfig.headerImage?.enabled, styleConfig.headerImage?.url]);
+  }, [styleConfig.headerImage?.enabled, styleConfig.headerImage?.url, advertConfig.imageOnly]);
 
   // Render live 1=1 preview sheet in both landing, desktop wizard, and mobile toggle preview
   useEffect(() => {
@@ -352,23 +353,6 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
     loadedHeaderImg,
   ]);
 
-  const handleSelectRecipient = (type: 'business' | 'personal' | 'civic' | 'maritime') => {
-    updateStyle({ recipientType: type });
-    // Only toggle the banner / apply the visual theme. Never pre-fill the text
-    // inputs with sample data - users should only see placeholders.
-    const presetIndex = { business: 0, civic: 1, maritime: 2 } as const;
-    if (type === 'personal') {
-      onAdvertChange({ ...advertConfig, enabled: false });
-    } else {
-      const presetTheme = PRESET_SPONSORS[presetIndex[type]]?.config.theme;
-      onAdvertChange({
-        ...advertConfig,
-        enabled: true,
-        ...(presetTheme ? { theme: presetTheme } : {}),
-      });
-    }
-  };
-
   if (mode === 'landing') {
     return (
       <div className="space-y-6 sm:space-y-10 py-2 sm:py-6">
@@ -389,7 +373,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
             </h1>
 
             <p className="text-sm sm:text-base text-muted leading-relaxed">
-              Start by choosing your paper size, page layout, and who your calendar is for, pick your fonts and typography, customize your colors, decide whether to include moon phases and holidays, and finish with punch-holes and margins before exporting.
+              Start by choosing your paper size, page layout, and header banner, pick your fonts and typography, customize your colors, decide whether to include moon phases and holidays, and finish with punch-holes and margins before exporting.
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-1">
@@ -485,9 +469,9 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
               <Surface variant="secondary" className="size-9 rounded-2xl flex items-center justify-center text-accent mb-1">
                 <Building2 className="size-4" />
               </Surface>
-              <Card.Title>1. Paper & Purpose</Card.Title>
+              <Card.Title>1. Paper &amp; Header</Card.Title>
               <Card.Description>
-                Pick paper size and page layout, then configure for a business sponsor, household, civic group, or maritime schedule.
+                Pick A4, A3, or Letter paper, choose Single, Double, or 12-Month layout, and set up your header banner or full-bleed header image.
               </Card.Description>
             </Card.Header>
           </Card>
@@ -547,7 +531,8 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
   // WIZARD MODE
   const widthSupported = fontSupportsWidth(styleConfig.fontFamily);
   const headerRange = getHeaderPctRange(styleConfig.pageLayout);
-  const notesBoxUnavailable = styleConfig.pageLayout === 'double' || styleConfig.pageLayout === 'year';
+  const notesBoxUnavailable = styleConfig.pageLayout === 'year';
+  const recommendedHeader = getRecommendedHeaderImageDimensions(styleConfig);
   const stretchIndex = Math.max(
     0,
     FONT_STRETCH_STEPS.findIndex((st) => st.id === (styleConfig.titleFontStretch || 'normal')),
@@ -674,9 +659,9 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
             {step === 'recipient' && (
               <>
                 <Card.Header>
-                  <Card.Title>Step 1: Paper, Layout &amp; Purpose</Card.Title>
+                  <Card.Title>Step 1: Paper, Layout &amp; Header</Card.Title>
                   <Card.Description>
-                    Select your month/year, paper size and page layout, who this calendar is for, and your top header banner.
+                    Select your month/year, paper size, page layout, and top header banner or full-bleed header image.
                   </Card.Description>
                 </Card.Header>
 
@@ -830,42 +815,44 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                       </Slider>
                     )}
 
-                    {headerRange && (
-                      <div className="space-y-1">
-                        <Label>Mini Months (month only, no header)</Label>
-                        <ToggleButtonGroup
-                          aria-label="Mini previous or next month"
-                          selectionMode="single"
-                          disallowEmptySelection
-                          fullWidth
-                          size="sm"
-                          selectedKeys={new Set([styleConfig.miniMonths || 'none'])}
-                          onSelectionChange={(keys) => {
-                            const selected = Array.from(keys)[0] as MiniMonthsOption | undefined;
-                            if (selected) updateStyle({ miniMonths: selected });
-                          }}
-                        >
-                          {MINI_MONTH_OPTIONS.map((o, idx) => (
-                            <ToggleButton key={o.id} id={o.id} className="text-xs px-1.5">
-                              {idx > 0 && <ToggleButtonGroup.Separator />}
-                              {o.label}
-                            </ToggleButton>
-                          ))}
-                        </ToggleButtonGroup>
-                        <p className="text-[11px] text-muted">
-                          Adds a small calendar of the previous and/or next month beside the header.
-                        </p>
-                      </div>
-                    )}
-
                     {(styleConfig.pageLayout === 'single' || styleConfig.pageLayout === 'double' || styleConfig.pageLayout === 'year') && (
                       <p className="text-[11px] text-muted">
                         {styleConfig.pageLayout === 'year'
                           ? 'The 12-month page shows holidays as tinted days; moon phases are not shown.'
                           : styleConfig.pageLayout === 'double'
-                          ? `Shows ${MONTH_NAMES[month - 1]} and ${MONTH_NAMES[month % 12]} together; notes box is off.`
+                          ? `Shows ${MONTH_NAMES[month - 1]} and ${MONTH_NAMES[month % 12]} together.`
                           : 'Banner and a large month title fill the header zone.'}
                       </p>
+                    )}
+
+                    {!notesBoxUnavailable && (
+                      <Surface variant="secondary" className="rounded-2xl p-3 flex items-center justify-between gap-3">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <NotebookPen className="size-4 text-accent shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-foreground">
+                              Include Monthly Notes Below Calendar
+                            </div>
+                            <div className="text-[11px] text-muted">
+                              Adds a ruled notes &amp; reminders box below the calendar grid.
+                            </div>
+                          </div>
+                        </div>
+                        <Switch
+                          size="sm"
+                          isSelected={Boolean(styleConfig.showMemoLines)}
+                          onChange={(checked) => updateStyle({ showMemoLines: checked })}
+                          aria-label="Include Monthly Notes Below Calendar"
+                          className="shrink-0"
+                        >
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                            <Label className="text-xs">{styleConfig.showMemoLines ? 'On' : 'Off'}</Label>
+                          </Switch.Content>
+                        </Switch>
+                      </Surface>
                     )}
                   </div>
 
@@ -901,57 +888,6 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
 
                   <Separator />
 
-                  <div className="space-y-2">
-                    <Label>Select Calendar Purpose / Recipient</Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {[
-                        {
-                          id: 'business' as const,
-                          title: 'Business & Commercial',
-                          desc: 'Branded company giveaway with hotline & address',
-                          icon: Building2,
-                        },
-                        {
-                          id: 'personal' as const,
-                          title: 'Personal & Household',
-                          desc: 'Clean family or home desk/wall calendar',
-                          icon: Home,
-                        },
-                        {
-                          id: 'civic' as const,
-                          title: 'Civic & Community',
-                          desc: 'Public service, barangay, or school schedule',
-                          icon: Landmark,
-                        },
-                        {
-                          id: 'maritime' as const,
-                          title: 'Maritime & Agriculture',
-                          desc: 'Coastal fishing, port, or farming almanac',
-                          icon: Compass,
-                        },
-                      ].map((item) => {
-                        const Icon = item.icon;
-                        const isSelected = (styleConfig.recipientType || 'business') === item.id;
-                        return (
-                          <Button
-                            key={item.id}
-                            variant={isSelected ? 'primary' : 'secondary'}
-                            onPress={() => handleSelectRecipient(item.id)}
-                            className="h-auto py-3 px-3.5 justify-start text-left flex-col items-start gap-1"
-                          >
-                            <div className="flex items-center gap-2 font-semibold text-xs sm:text-sm">
-                              <Icon className="size-4 shrink-0" />
-                              <span>{item.title}</span>
-                            </div>
-                            <span className="text-[11px] sm:text-xs opacity-80 font-normal whitespace-normal leading-snug">
-                              {item.desc}
-                            </span>
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
                   <Surface variant="secondary" className="rounded-2xl p-3.5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-xs sm:text-sm font-medium text-foreground">
@@ -981,90 +917,152 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
 
                   {advertConfig.enabled && (
                     <div className="space-y-3 pt-1">
-                      <TextField
-                        fullWidth
-                        value={advertConfig.businessName}
-                        onChange={(v) => onAdvertChange({ ...advertConfig, businessName: v })}
-                      >
-                        <Label>Header Title / Business or Family Name</Label>
-                        <Input placeholder="e.g. Mabuhay Trading / The Santos Family" />
-                      </TextField>
-
-                      <TextField
-                        fullWidth
-                        value={advertConfig.tagline}
-                        onChange={(v) => onAdvertChange({ ...advertConfig, tagline: v })}
-                      >
-                        <Label>Subtitle / Tagline / Greeting</Label>
-                        <Input placeholder="e.g. Trusted by Communities Nationwide" />
-                      </TextField>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <TextField
-                          fullWidth
-                          value={advertConfig.hotline}
-                          onChange={(v) => onAdvertChange({ ...advertConfig, hotline: v })}
+                      {/* Image-Only Header Toggle */}
+                      <Surface variant="secondary" className="rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <ImageIcon className="size-4 text-accent shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <div className="text-xs sm:text-sm font-medium text-foreground">
+                              Image-Only Header (Hide All Text)
+                            </div>
+                            <div className="text-[11px] sm:text-xs text-muted">
+                              Hides title, subtitle, phone, location, and website so your image fills the header 1:1.
+                            </div>
+                          </div>
+                        </div>
+                        <Switch
+                          size="sm"
+                          isSelected={Boolean(advertConfig.imageOnly)}
+                          onChange={(checked) => {
+                            onAdvertChange({ ...advertConfig, imageOnly: checked });
+                            if (checked) {
+                              updateImage({ enabled: true, placement: 'banner-bg', opacity: 100 });
+                            }
+                          }}
+                          aria-label="Image-Only Header"
+                          className="shrink-0"
                         >
-                          <Label>Phone / Contact Line</Label>
-                          <Input placeholder="e.g. +63 917 555 1234" />
-                        </TextField>
+                          <Switch.Content>
+                            <Switch.Control>
+                              <Switch.Thumb />
+                            </Switch.Control>
+                            <Label className="text-xs">{advertConfig.imageOnly ? 'On' : 'Off'}</Label>
+                          </Switch.Content>
+                        </Switch>
+                      </Surface>
 
-                        <TextField
-                          fullWidth
-                          value={advertConfig.website}
-                          onChange={(v) => onAdvertChange({ ...advertConfig, website: v })}
-                        >
-                          <Label>Website / Social Handle</Label>
-                          <Input placeholder="e.g. www.example.com" />
-                        </TextField>
-                      </div>
+                      {!advertConfig.imageOnly && (
+                        <>
+                          <TextField
+                            fullWidth
+                            value={advertConfig.businessName}
+                            onChange={(v) => onAdvertChange({ ...advertConfig, businessName: v })}
+                          >
+                            <Label>Header Title / Business or Family Name</Label>
+                            <Input placeholder="e.g. Mabuhay Trading / The Santos Family" />
+                          </TextField>
 
-                      <TextField
-                        fullWidth
-                        value={advertConfig.address}
-                        onChange={(v) => onAdvertChange({ ...advertConfig, address: v })}
-                      >
-                        <Label>Location / Address</Label>
-                        <Input placeholder="e.g. Manila, Philippines" />
-                      </TextField>
+                          <TextField
+                            fullWidth
+                            value={advertConfig.tagline}
+                            onChange={(v) => onAdvertChange({ ...advertConfig, tagline: v })}
+                          >
+                            <Label>Subtitle / Tagline / Greeting</Label>
+                            <Input placeholder="e.g. Trusted by Communities Nationwide" />
+                          </TextField>
 
-                      <Separator />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <TextField
+                              fullWidth
+                              value={advertConfig.hotline}
+                              onChange={(v) => onAdvertChange({ ...advertConfig, hotline: v })}
+                            >
+                              <Label>Phone / Contact Line</Label>
+                              <Input placeholder="e.g. +63 917 555 1234" />
+                            </TextField>
+
+                            <TextField
+                              fullWidth
+                              value={advertConfig.website}
+                              onChange={(v) => onAdvertChange({ ...advertConfig, website: v })}
+                            >
+                              <Label>Website / Social Handle</Label>
+                              <Input placeholder="e.g. www.example.com" />
+                            </TextField>
+                          </div>
+
+                          <TextField
+                            fullWidth
+                            value={advertConfig.address}
+                            onChange={(v) => onAdvertChange({ ...advertConfig, address: v })}
+                          >
+                            <Label>Location / Address</Label>
+                            <Input placeholder="e.g. Manila, Philippines" />
+                          </TextField>
+
+                          <Separator />
+                        </>
+                      )}
 
                       {/* HEADER IMAGE / LOGO / BANNER UPLOAD */}
                       <div className="space-y-3 pt-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <ImageIcon className="size-4 text-accent shrink-0" />
-                            <div>
-                              <div className="text-xs sm:text-sm font-semibold text-foreground">
-                                Header Logo / Emblem / Banner Image
-                              </div>
-                              <div className="text-[11px] sm:text-xs text-muted">
-                                Upload your own image (PNG, JPG, SVG, WebP) or choose a preset emblem.
+                        {!advertConfig.imageOnly && (
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ImageIcon className="size-4 text-accent shrink-0" />
+                              <div>
+                                <div className="text-xs sm:text-sm font-semibold text-foreground">
+                                  Header Logo / Emblem / Banner Image
+                                </div>
+                                <div className="text-[11px] sm:text-xs text-muted">
+                                  Upload your own image (PNG, JPG, SVG, WebP) or choose a preset emblem.
+                                </div>
                               </div>
                             </div>
+
+                            <Switch
+                              size="sm"
+                              isSelected={styleConfig.headerImage.enabled}
+                              onChange={(checked) => updateImage({ enabled: checked })}
+                              aria-label="Enable Header Image"
+                              className="shrink-0"
+                            >
+                              <Switch.Content>
+                                <Switch.Control>
+                                  <Switch.Thumb />
+                                </Switch.Control>
+                                <Label className="text-xs">
+                                  {styleConfig.headerImage.enabled ? 'On' : 'Off'}
+                                </Label>
+                              </Switch.Content>
+                            </Switch>
                           </div>
+                        )}
 
-                          <Switch
-                            size="sm"
-                            isSelected={styleConfig.headerImage.enabled}
-                            onChange={(checked) => updateImage({ enabled: checked })}
-                            aria-label="Enable Header Image"
-                            className="shrink-0"
-                          >
-                            <Switch.Content>
-                              <Switch.Control>
-                                <Switch.Thumb />
-                              </Switch.Control>
-                              <Label className="text-xs">
-                                {styleConfig.headerImage.enabled ? 'On' : 'Off'}
-                              </Label>
-                            </Switch.Content>
-                          </Switch>
-                        </div>
-
-                        {styleConfig.headerImage.enabled && (
+                        {(styleConfig.headerImage.enabled || advertConfig.imageOnly) && (
                           <Surface variant="secondary" className="rounded-2xl p-3.5 space-y-3.5">
+                            {/* Preferred 1:1 Header Image Resolution Box */}
+                            <Surface variant="default" className="rounded-xl px-3 py-2.5 border border-border space-y-1">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-[11px] font-semibold text-foreground">
+                                  Preferred 1:1 Header Resolution (300 DPI)
+                                </span>
+                                <Chip size="sm" variant="soft" color="accent" className="font-mono text-[11px]">
+                                  {recommendedHeader.widthPx300} × {recommendedHeader.heightPx300} px
+                                </Chip>
+                              </div>
+                              <div className="text-[11px] text-muted flex items-center justify-between gap-2 flex-wrap">
+                                <span>
+                                  Physical: {recommendedHeader.widthMm} × {recommendedHeader.heightMm} mm ({recommendedHeader.aspectRatio.toFixed(2)}:1 ratio)
+                                </span>
+                                {loadedHeaderImg && (
+                                  <span className="font-mono text-foreground">
+                                    Uploaded: {loadedHeaderImg.naturalWidth} × {loadedHeaderImg.naturalHeight} px
+                                  </span>
+                                )}
+                              </div>
+                            </Surface>
+
                             <div className="flex items-center gap-3">
                               <Surface
                                 variant="default"
@@ -1095,13 +1093,20 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                                   onPress={() => fileInputRef.current?.click()}
                                 >
                                   <Upload className="size-4 shrink-0" />
-                                  <span>Upload Custom Image / Logo</span>
+                                  <span>
+                                    {advertConfig.imageOnly
+                                      ? 'Upload Full Header Image'
+                                      : 'Upload Custom Image / Logo'}
+                                  </span>
                                 </Button>
                                 <p className="text-[11px] text-muted">
                                   Supports transparent PNG, SVG, JPG, or WebP.
                                 </p>
                               </div>
                             </div>
+
+                            {!advertConfig.imageOnly && (
+                              <>
 
                             <div className="space-y-1.5">
                               <Label>Or Select an Emblem Preset</Label>
@@ -1234,6 +1239,8 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                                 <Slider.Thumb />
                               </Slider.Track>
                             </Slider>
+                              </>
+                            )}
                           </Surface>
                         )}
                       </div>
@@ -2045,7 +2052,7 @@ export const CalendarSetupFlow: React.FC<CalendarSetupFlowProps> = ({
                         </div>
                         <div className="text-[11px] sm:text-xs text-muted">
                           {notesBoxUnavailable
-                            ? 'Not available with the Double Month and 12 Months layouts. Switch to Classic or Single Month to use it.'
+                            ? 'Not available with the 12 Months layout. Switch to Classic, Single Month, or Double Month to use it.'
                             : 'Prints ruled handwriting lines below the calendar grid for notes and to-dos.'}
                         </div>
                       </div>

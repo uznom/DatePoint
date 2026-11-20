@@ -2,7 +2,6 @@ import {
   CalendarStyleConfig,
   FontFamilyOption,
   FontStretchOption,
-  MiniMonthsOption,
   PageLayoutOption,
   PaperSizeOption,
 } from '../types';
@@ -77,7 +76,6 @@ export const DEFAULT_STYLE_CONFIG: CalendarStyleConfig = {
   showGridShadow: true,
 
   // Content Toggles (1=1 Screen & Print)
-  recipientType: 'business',
   showMoonPhases: true,
   showHolidays: true,
   showCultural: true,
@@ -88,7 +86,6 @@ export const DEFAULT_STYLE_CONFIG: CalendarStyleConfig = {
   paperSize: 'a4',
   pageLayout: 'classic',
   headerHeightPct: 38,
-  miniMonths: 'none',
   printOrientation: 'landscape',
   printMargin: 6,
 };
@@ -321,13 +318,6 @@ export const PAGE_LAYOUTS: Array<{ id: PageLayoutOption; label: string; descript
   { id: 'year', label: '12 Months', description: 'All twelve months on a single page.' },
 ];
 
-export const MINI_MONTH_OPTIONS: Array<{ id: MiniMonthsOption; label: string }> = [
-  { id: 'none', label: 'None' },
-  { id: 'previous', label: 'Previous' },
-  { id: 'next', label: 'Next' },
-  { id: 'both', label: 'Both' },
-];
-
 /** Allowed header-zone share (percent of page height) per layout; null = layout has no header zone. */
 export function getHeaderPctRange(
   layout: PageLayoutOption | undefined,
@@ -357,7 +347,6 @@ export function sanitizeStyleConfig(saved: Partial<CalendarStyleConfig>): Calend
   }
   if (!PAPER_SIZE_IDS.includes(merged.paperSize)) merged.paperSize = DEFAULT_STYLE_CONFIG.paperSize;
   if (!PAGE_LAYOUTS.some((l) => l.id === merged.pageLayout)) merged.pageLayout = 'classic';
-  if (!MINI_MONTH_OPTIONS.some((o) => o.id === merged.miniMonths)) merged.miniMonths = 'none';
   merged.headerHeightPct = getHeaderPct(merged) || DEFAULT_STYLE_CONFIG.headerHeightPct;
   return merged;
 }

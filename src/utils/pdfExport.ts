@@ -3,7 +3,6 @@ import {
   AdvertConfig,
   CalendarStyleConfig,
   HolidayItem,
-  MiniMonthsOption,
   MoonPhaseCategory,
   PageLayoutOption,
   PaperSizeOption,
@@ -155,19 +154,66 @@ export function getMonthsOnPage(year: number, month: number, layout: PageLayoutO
   return [{ year, month }];
 }
 
-/** Mini calendars (month grid only, no header) for the months before and/or after the page's months. */
-export function getAdjacentMiniMonths(
-  year: number,
-  month: number,
-  layout: PageLayoutOption = 'classic',
-  mode: MiniMonthsOption = 'none',
-): MonthRef[] {
-  if (layout !== 'single' && layout !== 'double') return [];
-  const span = layout === 'double' ? 2 : 1;
-  const result: MonthRef[] = [];
-  if (mode === 'previous' || mode === 'both') result.push(shiftMonth(year, month, -1));
-  if (mode === 'next' || mode === 'both') result.push(shiftMonth(year, month, span));
-  return result;
+export interface HeaderImageDimensions {
+  widthMm: number;
+  heightMm: number;
+  widthPx300: number;
+  heightPx300: number;
+  aspectRatio: number;
+}
+
+/**
+ * Computes the exact physical size and recommended 300 DPI pixel resolution
+ * for a 1:1 full-header image matching the current paper, orientation, layout,
+ * header height share, punch-hole guide, and margin settings.
+ */
+export function getRecommendedHeaderImageDimensions(
+  styleConfig: CalendarStyleConfig,
+): HeaderImageDimensions {
+  const orientation = styleConfig.printOrientation || 'landscape';
+  const paperSize = styleConfig.paperSize || 'a4';
+  const dims = getPaperDimensions(paperSize, orientation);
+  const W = dims.logicalWidthPx;
+  const H = dims.logicalHeightPx;
+  const isLandscape = orientation === 'landscape';
+
+  const mmToPx = W / dims.widthMm;
+  const pad = Math.max(4, styleConfig.printMargin ?? 8) * mmToPx;
+  let curY = pad;
+  if (styleConfig.showHolePunchGuide) {
+    const punchY = Math.max(11, pad * 0.48);
+    if (curY < punchY + 18) curY = punchY + 18;
+  }
+
+  const contentW = W - pad * 2;
+  const contentBottom = H - pad;
+  const headerImage = styleConfig.headerImage;
+  const bannerLogoPx =
+    headerImage?.size === 'small' ? 38 : headerImage?.size === 'large' ? 58 : 48;
+  const naturalBannerH = Math.max(
+    isLandscape ? 74 : 78,
+    headerImage?.enabled && headerImage?.url ? bannerLogoPx + 24 : 74,
+  );
+
+  const layout: PageLayoutOption = styleConfig.pageLayout || 'classic';
+  let bannerH = naturalBannerH;
+  if (layout === 'single') {
+    const zoneH = Math.round(((contentBottom - curY) * getHeaderPct(styleConfig)) / 100);
+    const classicTitleSize = isLandscape ? 27.5 : 25;
+    const titleSize = Math.min(44, Math.max(classicTitleSize, zoneH * 0.15));
+    const titleRowH = titleSize * 1.25;
+    bannerH = Math.max(naturalBannerH, zoneH - titleRowH - 8);
+  } else if (layout === 'double') {
+    bannerH = Math.round(((contentBottom - curY) * getHeaderPct(styleConfig)) / 100);
+  }
+
+  const widthMm = Math.round((contentW / mmToPx) * 10) / 10;
+  const heightMm = Math.round((bannerH / mmToPx) * 10) / 10;
+  const widthPx300 = Math.round((widthMm / 25.4) * 300);
+  const heightPx300 = Math.round((heightMm / 25.4) * 300);
+  const aspectRatio = Math.round((contentW / bannerH) * 100) / 100;
+
+  return { widthMm, heightMm, widthPx300, heightPx300, aspectRatio };
 }
 
 /** First month of every PDF page: one page per month, per month pair (double) or one page (year). */
@@ -671,6 +717,45 @@ export function renderCalendarSheetToCanvas(
     ctx.fillStyle = grad;
     ctx.fillRect(bannerX, bannerY, bannerW, bannerH);
 
+    const showHeaderAccent = styleConfig.showHeaderAccent !== false;
+
+    if (advertConfig.imageOnly) {
+      // Image-Only Header: fill the entire banner 1:1 with the uploaded image, no text or contact lines
+      if (headerImg && headerImage?.url) {
+        drawImageCover(ctx, headerImg, bannerX, bannerY, bannerW, bannerH);
+      } else if (showPlaceholders) {
+        const rec = getRecommendedHeaderImageDimensions(styleConfig);
+        ctx.save();
+        ctx.fillStyle = styleConfig.headerTextColor || '#ffffff';
+        ctx.globalAlpha = 0.48;
+        ctx.font = `700 14px ${fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('UPLOAD FULL HEADER IMAGE', bannerX + bannerW / 2, bannerY + bannerH / 2 - 8);
+        ctx.globalAlpha = 0.38;
+        ctx.font = `500 10px ${MONO_FONT_STACK}`;
+        ctx.fillText(
+          `Recommended 1:1 size: ${rec.widthPx300} × ${rec.heightPx300} px (300 DPI)`,
+          bannerX + bannerW / 2,
+          bannerY + bannerH / 2 + 10,
+        );
+        ctx.restore();
+      }
+      ctx.restore(); // undo banner clip
+
+      if (showHeaderAccent && (styleConfig.headerBorderWidth ?? 0) > 0) {
+        ctx.save();
+        drawRoundedRectPath(ctx, bannerX, bannerY, bannerW, bannerH, bannerRadius);
+        ctx.strokeStyle = styleConfig.headerAccentColor || '#eab308';
+        ctx.lineWidth = styleConfig.headerBorderWidth;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.restore();
+      return;
+    }
+
     // Optional Banner Background or Center Watermark Image
     if (hasImage && headerImg && headerImage.placement === 'banner-bg') {
       ctx.save();
@@ -735,7 +820,6 @@ export function renderCalendarSheetToCanvas(
       rightCursorX -= logoPx + 13;
     }
 
-    const showHeaderAccent = styleConfig.showHeaderAccent !== false;
     const accentIconColor = showHeaderAccent
       ? (styleConfig.headerAccentColor || '#fde047')
       : (styleConfig.headerTextColor || '#ffffff');
@@ -1408,8 +1492,16 @@ export function renderCalendarSheetToCanvas(
   const footerH = hasFooterBar ? 23 : 0;
   const footerY = contentBottom - footerH;
 
-  const showMemoLines = Boolean(styleConfig.showMemoLines) && (layout === 'classic' || layout === 'single');
-  const memoBoxH = showMemoLines ? (isLandscape ? 54 : 68) : 0;
+  const showMemoLines = Boolean(styleConfig.showMemoLines) && layout !== 'year';
+  const memoBoxH = showMemoLines
+    ? layout === 'double'
+      ? isLandscape
+        ? 46
+        : 50
+      : isLandscape
+      ? 54
+      : 68
+    : 0;
   const memoBoxY = (hasFooterBar ? footerY - 7 : contentBottom) - memoBoxH;
   const bodyBottom = showMemoLines ? memoBoxY - 8 : hasFooterBar ? footerY - 7 : contentBottom;
 
@@ -1457,46 +1549,7 @@ export function renderCalendarSheetToCanvas(
     const zoneGap = 10;
     const zoneH = Math.round(((contentBottom - zoneTop) * getHeaderPct(styleConfig)) / 100);
     const pageMonths = getMonthsOnPage(year, month, layout);
-    const minis = getAdjacentMiniMonths(year, month, layout, styleConfig.miniMonths || 'none');
-
-    // Mini previous / next months sit on the right of the header zone (side by side, or stacked if taller)
-    let miniBlockW = 0;
-    if (minis.length > 0) {
-      const n = minis.length;
-      const MINI_BASE_H = 30;
-      const MINI_H_PER_W = 0.78;
-      const miniGap = 8;
-      const rowW = Math.min(
-        (zoneH - MINI_BASE_H) / MINI_H_PER_W,
-        (contentW * 0.42 - (n - 1) * miniGap) / n,
-        260,
-      );
-      const stackW =
-        n > 1
-          ? Math.min(((zoneH - (n - 1) * miniGap) / n - MINI_BASE_H) / MINI_H_PER_W, contentW * 0.25, 260)
-          : 0;
-      const stacked = n > 1 && stackW > rowW;
-      const miniW = Math.max(60, stacked ? stackW : rowW);
-      const miniH = MINI_BASE_H + miniW * MINI_H_PER_W;
-      const blockW = stacked ? miniW : n * miniW + (n - 1) * miniGap;
-      const blockH = stacked ? n * miniH + (n - 1) * miniGap : miniH;
-      const blockX = contentX + contentW - blockW;
-      const blockY = zoneTop + Math.max(0, (zoneH - blockH) / 2);
-      miniBlockW = blockW;
-
-      minis.forEach((ref, i) => {
-        drawMiniMonth(
-          stacked ? blockX : blockX + i * (miniW + miniGap),
-          stacked ? blockY + i * (miniH + miniGap) : blockY,
-          miniW,
-          miniH,
-          ref,
-          ref.year !== year,
-        );
-      });
-    }
-
-    const panelW = miniBlockW > 0 ? contentW - miniBlockW - zoneGap : contentW;
+    const panelW = contentW;
 
     if (advertConfig.enabled) {
       if (layout === 'single') {
@@ -1731,7 +1784,8 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
   await ensureCalendarFontsLoaded(effectiveStyle);
 
   const headerImg =
-    effectiveStyle.headerImage?.enabled && effectiveStyle.headerImage?.url
+    (effectiveStyle.headerImage?.enabled || advertConfig.imageOnly) &&
+    effectiveStyle.headerImage?.url
       ? await loadHeaderImage(effectiveStyle.headerImage.url)
       : null;
 

@@ -51,6 +51,7 @@ export interface UserEvent {
 
 export interface AdvertConfig {
   enabled: boolean;
+  imageOnly?: boolean; // Hide title, subtitle, phone, address, website and fill header 1:1 with uploaded image
   theme: 'classic-ph' | 'modern-gradient' | 'minimal-light' | 'dark-luxury';
   businessName: string;
   tagline: string;
@@ -109,9 +110,6 @@ export type PaperSizeOption = 'a4' | 'a3' | 'letter';
  */
 export type PageLayoutOption = 'classic' | 'single' | 'double' | 'year';
 
-/** Which neighbouring months to show as mini calendars (month grid only, no header). */
-export type MiniMonthsOption = 'none' | 'previous' | 'next' | 'both';
-
 export interface CalendarStyleConfig {
   fontFamily: FontFamilyOption;
   fontWeight: FontWeightOption;
@@ -146,7 +144,6 @@ export interface CalendarStyleConfig {
   showGridShadow: boolean;
   
   // Content Toggles (1=1 Screen & Print)
-  recipientType?: 'business' | 'personal' | 'civic' | 'maritime';
   showMoonPhases?: boolean;
   showHolidays?: boolean;
   showCultural?: boolean;
@@ -157,7 +154,6 @@ export interface CalendarStyleConfig {
   paperSize: PaperSizeOption;
   pageLayout?: PageLayoutOption;
   headerHeightPct?: number; // header zone share of the page: 35-40 (single) or 25-35 (double)
-  miniMonths?: MiniMonthsOption;
   printOrientation: 'landscape' | 'portrait';
   printMargin: number; // mm: 2 to 20
 }

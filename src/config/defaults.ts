@@ -3,6 +3,7 @@ import { PRESET_SPONSORS } from '../components/AdvertHeader';
 
 export const DEFAULT_ADVERT: AdvertConfig = {
   enabled: true,
+  imageOnly: false,
   theme: 'classic-ph',
   businessName: '',
   tagline: '',
