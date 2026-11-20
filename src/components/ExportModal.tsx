@@ -5,8 +5,11 @@ import {
   getPaperDimensions, 
   getPdfPageAnchors, 
   loadHeaderImage, 
-  renderCalendarSheetToCanvas 
+  renderCalendarSheetToCanvas,
+  PdfExportProgress,
+  PdfExportResult,
 } from '../utils/pdfExport';
+import { ExportLoadingOverlay } from './ExportLoadingOverlay';
 import { getHolidaysForMonth } from '../utils/phHolidays';
 import { DEFAULT_STYLE_CONFIG } from '../utils/stylePresets';
 import { 
@@ -58,7 +61,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   );
   const [dpiQuality, setDpiQuality] = useState<'standard-300' | 'ultra-450'>('ultra-450');
   const [isExporting, setIsExporting] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [exportProgress, setExportProgress] = useState<PdfExportProgress | null>(null);
+  const [exportResult, setExportResult] = useState<PdfExportResult | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const effectiveStyle: CalendarStyleConfig = {
@@ -112,10 +116,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   const handleDownloadPdf = async () => {
     setIsExporting(true);
-    setDownloadSuccess(false);
+    setExportResult(null);
 
     try {
-      await exportCalendarToPdf({
+      const result = await exportCalendarToPdf({
         year,
         month,
         advertConfig,
@@ -124,13 +128,20 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         orientation,
         fullYear: exportScope === 'year',
         dpiQuality,
+        onProgress: setExportProgress,
       });
-      setDownloadSuccess(true);
+      setExportResult(result);
     } catch (err) {
       console.error('Failed to export PDF:', err);
     } finally {
       setIsExporting(false);
+      setExportProgress(null);
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   };
 
   const handleNativePrint = () => {
@@ -141,13 +152,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   return (
+    <>
+    <ExportLoadingOverlay progress={exportProgress} />
     <Modal.Backdrop
       isOpen={true}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !isExporting) onClose();
       }}
       variant="transparent"
-      isDismissable
+      isDismissable={!isExporting}
     >
       <Modal.Container size="lg" scroll="inside">
         <Modal.Dialog className="print:hidden">
@@ -273,12 +286,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </ToggleButtonGroup>
               </div>
 
-              {downloadSuccess && (
+              {exportResult && (
                 <Card variant="secondary">
                   <Card.Content className="flex-row items-center gap-2 text-success">
                     <Check className="size-4 shrink-0" />
                     <span className="text-xs font-medium">
-                      1=1 PDF exported successfully! Check your downloads folder.
+                      PDF exported ({formatFileSize(exportResult.fileSizeBytes)} • {exportResult.pageCount}{' '}
+                      {exportResult.pageCount === 1 ? 'page' : 'pages'})! Check your downloads folder.
                     </span>
                   </Card.Content>
                 </Card>
@@ -308,5 +322,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </Modal.Dialog>
         </Modal.Container>
     </Modal.Backdrop>
+    </>
   );
 };

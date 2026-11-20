@@ -12,8 +12,10 @@ import {
   exportCalendarToPdf, 
   getPaperDimensions, 
   loadHeaderImage, 
-  renderCalendarSheetToCanvas 
+  renderCalendarSheetToCanvas,
+  PdfExportProgress,
 } from '../utils/pdfExport';
+import { ExportLoadingOverlay } from './ExportLoadingOverlay';
 import { 
   Button, 
   Card, 
@@ -76,6 +78,7 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
   const [loadedHeaderImg, setLoadedHeaderImg] = useState<HTMLImageElement | null>(null);
   const [fontsLoadedTick, setFontsLoadedTick] = useState<number>(0);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportProgress, setExportProgress] = useState<PdfExportProgress | null>(null);
   const [exportDone, setExportDone] = useState<boolean>(false);
   const [zoomMode, setZoomMode] = useState<PreviewZoomMode>('fit-screen');
 
@@ -162,11 +165,13 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
         styleConfig,
         orientation: styleConfig.printOrientation,
         fullYear: false,
+        onProgress: setExportProgress,
       });
       setExportDone(true);
       setTimeout(() => setExportDone(false), 3000);
     } finally {
       setIsExporting(false);
+      setExportProgress(null);
     }
   };
 
@@ -181,6 +186,7 @@ export const PrintPreviewSheet: React.FC<PrintPreviewSheetProps> = ({
 
   return (
     <div className={printOnly ? 'hidden print:block' : 'space-y-3 sm:space-y-4'}>
+      <ExportLoadingOverlay progress={exportProgress} />
       {/* 1=1 Print Control & Edit/Export Bar using 1:1 HeroUI v3 Components */}
       {!printOnly && (
         <Card variant="default" className="print:hidden">

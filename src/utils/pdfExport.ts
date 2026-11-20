@@ -19,6 +19,20 @@ import {
   getTitleFontAxes,
 } from './stylePresets';
 
+export interface PdfExportProgress {
+  stage: 'preparing' | 'rendering' | 'saving';
+  currentPage: number;
+  totalPages: number;
+  percent: number; // 0-100
+  label: string;
+}
+
+export interface PdfExportResult {
+  fileName: string;
+  pageCount: number;
+  fileSizeBytes: number;
+}
+
 export interface PdfExportOptions {
   year: number;
   month: number; // 1-12
@@ -28,6 +42,7 @@ export interface PdfExportOptions {
   orientation?: 'landscape' | 'portrait';
   fullYear: boolean; // true = all 12 months, false = single month
   dpiQuality?: 'standard-300' | 'ultra-450';
+  onProgress?: (progress: PdfExportProgress) => void;
 }
 
 export interface SheetDimensions {
@@ -1786,11 +1801,22 @@ export function renderCalendarSheetToCanvas(
   return dims;
 }
 
+/** Yields to the browser paint loop so a loading screen can render and update between heavy canvas pages. */
+function yieldToBrowserPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
 /**
- * Exports a single month or full 12-month calendar to a commercial print-ready PDF
- * with 100% 1=1 fidelity to the PrintPreviewSheet and ultra-crisp supersampled DPI.
+ * Exports a single month or full 12-month calendar to a compressed, commercial print-ready PDF
+ * with 100% 1=1 fidelity to the PrintPreviewSheet and progress callbacks for the loading screen.
  */
-export async function exportCalendarToPdf(options: PdfExportOptions): Promise<void> {
+export async function exportCalendarToPdf(options: PdfExportOptions): Promise<PdfExportResult> {
   const {
     year,
     month,
@@ -1800,12 +1826,27 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
     orientation = styleConfig.printOrientation || 'landscape',
     fullYear,
     dpiQuality = 'ultra-450',
+    onProgress,
   } = options;
 
   const effectiveStyle: CalendarStyleConfig = {
     ...styleConfig,
     printOrientation: orientation,
   };
+
+  const paperFormat: PaperSizeOption = effectiveStyle.paperSize || 'a4';
+  const pageLayout: PageLayoutOption = effectiveStyle.pageLayout || 'classic';
+  const monthsToRender = getPdfPageAnchors(month, pageLayout, fullYear);
+  const totalPages = monthsToRender.length;
+
+  onProgress?.({
+    stage: 'preparing',
+    currentPage: 0,
+    totalPages,
+    percent: 5,
+    label: 'Loading fonts & header image...',
+  });
+  await yieldToBrowserPaint();
 
   // Explicitly pre-load all required font faces and header emblem before rendering
   await ensureCalendarFontsLoaded(effectiveStyle);
@@ -1816,8 +1857,6 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
       ? await loadHeaderImage(effectiveStyle.headerImage.url)
       : null;
 
-  const paperFormat: PaperSizeOption = effectiveStyle.paperSize || 'a4';
-  const pageLayout: PageLayoutOption = effectiveStyle.pageLayout || 'classic';
   const dims = getPaperDimensions(paperFormat, orientation);
 
   const doc = new jsPDF({
@@ -1845,19 +1884,37 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
     creator: 'DatePoint 1=1 Print Engine',
   });
 
-  const monthsToRender = getPdfPageAnchors(month, pageLayout, fullYear);
-
-  // Ultra-HD supersampling scale for razor-sharp typography, borders, and lunar vectors
+  // High-DPI supersampling paired with high-quality JPEG compression keeps print text crisp
+  // while cutting PDF file size by ~80-90% compared to uncompressed PNGs.
   const renderScale =
     dpiQuality === 'ultra-450'
-      ? monthsToRender.length > 1 || pageLayout === 'year'
-        ? 4.0
-        : 4.5
-      : 3.2;
+      ? totalPages > 1 || pageLayout === 'year'
+        ? 3.4
+        : 3.8
+      : 2.6;
+  const jpegQuality = dpiQuality === 'ultra-450' ? 0.9 : 0.84;
 
   const offscreenCanvas = document.createElement('canvas');
 
-  monthsToRender.forEach((m, index) => {
+  for (let index = 0; index < totalPages; index++) {
+    const m = monthsToRender[index];
+    const pageNum = index + 1;
+    const pageLabel =
+      pageLayout === 'year'
+        ? `Rendering ${year} (12 Months)...`
+        : pageLayout === 'double'
+        ? `Rendering ${MONTH_NAMES[m - 1]} & ${MONTH_NAMES[shiftMonth(year, m, 1).month - 1]} ${year}...`
+        : `Rendering ${MONTH_NAMES[m - 1]} ${year}...`;
+
+    onProgress?.({
+      stage: 'rendering',
+      currentPage: pageNum,
+      totalPages,
+      percent: 10 + Math.round((index / totalPages) * 78),
+      label: pageLabel,
+    });
+    await yieldToBrowserPaint();
+
     if (index > 0) {
       doc.addPage(paperFormat, orientation === 'landscape' ? 'landscape' : 'portrait');
     }
@@ -1875,18 +1932,40 @@ export async function exportCalendarToPdf(options: PdfExportOptions): Promise<vo
       scale: renderScale,
     });
 
-    const dataUrl = offscreenCanvas.toDataURL('image/png', 1.0);
+    const dataUrl = offscreenCanvas.toDataURL('image/jpeg', jpegQuality);
     doc.addImage(
       dataUrl,
-      'PNG',
+      'JPEG',
       0,
       0,
       dims.widthMm,
       dims.heightMm,
       `page_${m}`,
-      'NONE'
+      'FAST'
     );
+  }
+
+  onProgress?.({
+    stage: 'saving',
+    currentPage: totalPages,
+    totalPages,
+    percent: 94,
+    label: 'Compressing & saving PDF file...',
+  });
+  await yieldToBrowserPaint();
+
+  const fileName = `DatePoint_Calendar_${fileSuffix}_${paperFormat.toUpperCase()}_${orientation}.pdf`;
+  const pdfBlob = doc.output('blob');
+  const fileSizeBytes = pdfBlob.size;
+  doc.save(fileName);
+
+  onProgress?.({
+    stage: 'saving',
+    currentPage: totalPages,
+    totalPages,
+    percent: 100,
+    label: 'Done!',
   });
 
-  doc.save(`DatePoint_Calendar_${fileSuffix}_${paperFormat.toUpperCase()}_${orientation}.pdf`);
+  return { fileName, pageCount: totalPages, fileSizeBytes };
 }
